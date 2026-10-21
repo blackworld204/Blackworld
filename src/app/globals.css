@@ -548,6 +548,11 @@ button { cursor: pointer; }
   to { opacity: 1; transform: none; }
 }
 
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+  to { opacity: 1; transform: translateX(-50%); }
+}
+
 @keyframes fill {
   from { transform: scaleX(0); }
   to { transform: scaleX(1); }
@@ -595,7 +600,13 @@ button { cursor: pointer; }
   }
 
   .confirm-layer { animation: settle 160ms var(--ease); }
-  .confirm-dialog { animation: drop 180ms var(--ease); }
+  .confirm-dialog, .balance-dialog { animation: drop 180ms var(--ease); }
+  .toast { animation: toast-in 220ms var(--ease); }
+  .receipt-sheet { animation: rise 280ms var(--ease); }
+  .admin-metrics > div { animation: rise 420ms var(--ease) backwards; }
+  .admin-metrics > div:nth-child(2) { animation-delay: 60ms; }
+  .admin-metrics > div:nth-child(3) { animation-delay: 120ms; }
+  .admin-metrics > div:nth-child(4) { animation-delay: 180ms; }
 
   .support-list p { animation: rise 240ms var(--ease); }
 
@@ -605,7 +616,7 @@ button { cursor: pointer; }
   }
 
   .app-nav a, .text-button, .menu-links a {
-    transition: color 160ms var(--ease);
+    transition: color 160ms var(--ease), background-color 160ms var(--ease);
   }
 }
 
