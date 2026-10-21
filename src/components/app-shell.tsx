@@ -39,8 +39,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setOpen(false);
-    const current = document.querySelector(".app-side [aria-current='page']");
-    if (current instanceof HTMLElement) current.scrollIntoView({ block: "nearest" });
+    const column = document.querySelector(".app-column");
+    if (column instanceof HTMLElement) column.scrollTop = 0;
+    const nav = document.querySelector(".app-nav");
+    const current = nav?.querySelector("[aria-current='page']");
+    if (!(nav instanceof HTMLElement) || !(current instanceof HTMLElement)) return;
+    const top = current.offsetTop - (nav.clientHeight - current.offsetHeight) / 2;
+    nav.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
   }, [path]);
 
   useEffect(() => {

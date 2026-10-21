@@ -29,7 +29,7 @@ html:has(.app) { scroll-padding-top: 120px; }
 :target { scroll-margin-top: 24px; }
 
 @media (prefers-reduced-motion: reduce) {
-  html { scroll-behavior: auto; }
+  html, .app-column, .app-nav { scroll-behavior: auto; }
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
@@ -1460,6 +1460,9 @@ select {
   overflow: auto;
   padding: 8px 0 12px;
   scrollbar-width: thin;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 .app-nav a {
   display: flex;
@@ -2045,6 +2048,7 @@ select {
 .goal-row .form-error { grid-column: 1 / -1; margin: 0; }
 
 @media print {
+  html, html body, .app, .app-column { height: auto !important; overflow: visible !important; }
   .app-head, .app-side, .no-print, .sticky-top, .notice { display: none !important; }
   .app, .app-main { animation: none !important; }
   body { background: #fff; }
@@ -2397,7 +2401,22 @@ select {
   .app .session-email { display: inline; }
 }
 @media (min-width: 960px) {
-  .app { display: grid; grid-template-columns: 232px minmax(0, 1fr); align-items: start; }
+  html:has(.app),
+  html:has(.app) body {
+    height: 100%;
+    overflow: hidden;
+  }
+  .app { display: grid; grid-template-columns: 232px minmax(0, 1fr); align-items: stretch; height: 100vh; min-height: 0; }
+  .app-column {
+    height: 100vh;
+    min-height: 0;
+    overflow-x: clip;
+    overflow-y: auto;
+    scroll-behavior: smooth;
+    scroll-padding-top: 88px;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
   .app-side {
     display: flex;
     flex-direction: column;
