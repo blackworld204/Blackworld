@@ -114,6 +114,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Mark />
           <span>Blackworld</span>
         </Link>
+        <button
+          type="button"
+          className="menu-toggle app-menu-toggle"
+          aria-expanded={open}
+          aria-controls="account-menu"
+          onClick={() => setOpen(true)}
+        >
+          {t("Menu")}
+        </button>
         <div className="app-bar-actions">
           <ConnectionMark />
           <LanguageSelect />
@@ -128,15 +137,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </span>
             <span className="app-bell-label">{t("Notifications")}</span>
           </Link>
-          <button
-            type="button"
-            className="menu-toggle app-menu-toggle"
-            aria-expanded={open}
-            aria-controls="account-menu"
-            onClick={() => setOpen(true)}
-          >
-            {t("Menu")}
-          </button>
           <span className="app-account">
             <span className="mono session-email">{session?.email}</span>
             <button type="button" className="text-button session-signout" onClick={signOut}>

@@ -47,6 +47,15 @@ export function Header() {
           <Mark />
           <span>Blackworld</span>
         </Link>
+        <button
+          type="button"
+          className="menu-toggle"
+          aria-expanded={open}
+          aria-controls="site-menu"
+          onClick={() => setOpen(true)}
+        >
+          {t("Menu")}
+        </button>
         <nav className="nav-desktop" aria-label={t("Platform")}>
           {links.map((link) => (
             <Link
@@ -79,15 +88,6 @@ export function Header() {
           <Link href="/apply" className="btn btn-primary btn-sm">
             {t("Apply")}
           </Link>
-          <button
-            type="button"
-            className="menu-toggle"
-            aria-expanded={open}
-            aria-controls="site-menu"
-            onClick={() => setOpen(true)}
-          >
-            {t("Menu")}
-          </button>
         </div>
       </div>
       {open ? (

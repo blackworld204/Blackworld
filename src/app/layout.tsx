@@ -8,6 +8,7 @@ import { Chrome } from "@/components/chrome";
 import { Toaster } from "@/components/toast";
 import { LiveChat } from "@/components/live-chat";
 import { Motion } from "@/components/motion";
+import { SmoothScroll } from "@/components/smooth-scroll";
 import { PushBridge } from "@/components/push-bridge";
 import { I18nProvider } from "@/i18n/provider";
 import { SessionProvider } from "@/components/session";
@@ -61,6 +62,7 @@ export default function RootLayout({
         <I18nProvider>
           <SessionProvider>
             <Motion />
+            <SmoothScroll />
             <PushBridge />
             <Chrome>{children}</Chrome>
             <Toaster />

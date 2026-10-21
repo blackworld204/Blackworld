@@ -5,8 +5,19 @@ import { CopyButton } from "@/components/copy-button";
 import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
-import { addNote, alertsOf, consumeRecoveryCode, disableTotp, enableTotp } from "@/lib/bank";
-import { createRecoveryCodes, createSecret, groupSecret, verifyTotp } from "@/lib/totp";
+import {
+  addNote,
+  alertsOf,
+  consumeRecoveryCode,
+  disableTotp,
+  enableTotp,
+} from "@/lib/bank";
+import {
+  createRecoveryCodes,
+  createSecret,
+  groupSecret,
+  verifyTotp,
+} from "@/lib/totp";
 
 export function TwoFactorPanel() {
   const { user } = useAccount();
@@ -52,7 +63,8 @@ export function TwoFactorPanel() {
   function confirmOff(event: React.FormEvent) {
     event.preventDefault();
     if (!user?.totpSecret) return;
-    const ok = verifyTotp(user.totpSecret, code) || consumeRecoveryCode(user.id, code);
+    const ok =
+      verifyTotp(user.totpSecret, code) || consumeRecoveryCode(user.id, code);
     if (!ok) {
       setError(t("That code is not valid."));
       return;
@@ -89,17 +101,25 @@ export function TwoFactorPanel() {
       <h2>{t("Two-factor authentication")}</h2>
       <p className="muted">
         {enabled
-          ? t("On. Sign-in asks for a 6-digit code from your authenticator app.")
+          ? t(
+              "On. Sign-in asks for a 6-digit code from your authenticator app.",
+            )
           : t("Off. Sign-in does not ask for an authenticator code.")}
       </p>
 
       {codes ? (
         <div className="stack">
           <h3>{t("Recovery codes")}</h3>
-          <p className="muted">{t("Each code works once if you cannot open the app. They stay in this browser.")}</p>
+          <p className="muted">
+            {t(
+              "Each code works once if you cannot open the app. They stay in this browser.",
+            )}
+          </p>
           <ul className="recovery-grid">
             {codes.map((item) => (
-              <li key={item} className="mono">{item}</li>
+              <li key={item} className="mono">
+                {item}
+              </li>
             ))}
           </ul>
           <div className="form-row">
@@ -118,8 +138,16 @@ export function TwoFactorPanel() {
         </div>
       ) : secret ? (
         <form className="stack" onSubmit={confirmSetup}>
-          <p>{t("Add this key in an authenticator app, then enter the 6-digit code.")}</p>
-          <p className="muted">{t("The key stays in this browser. Codes are checked here, not by a bank.")}</p>
+          <p>
+            {t(
+              "Add this key in an authenticator app, then enter the 6-digit code.",
+            )}
+          </p>
+          <p className="muted">
+            {t(
+              "The key stays in this browser. Codes are checked here, not by a bank.",
+            )}
+          </p>
           <p className="kicker">{t("Setup key")}</p>
           <p className="mono totp-key">{groupSecret(secret)}</p>
           <CopyButton value={secret} label="Copy" />
@@ -138,7 +166,11 @@ export function TwoFactorPanel() {
           </label>
           {error ? <p className="form-error">{error}</p> : null}
           <div className="form-row">
-            <button type="button" className="text-button" onClick={() => setSecret("")}>
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => setSecret("")}
+            >
               {t("Cancel")}
             </button>
             <button className="btn btn-primary" type="submit">
@@ -148,7 +180,9 @@ export function TwoFactorPanel() {
         </form>
       ) : enabled && turningOff ? (
         <form className="stack" onSubmit={confirmOff}>
-          <p className="muted">{t("Enter a current 6-digit code or a recovery code.")}</p>
+          <p className="muted">
+            {t("Enter a current 6-digit code or a recovery code.")}
+          </p>
           <label className="field">
             <span>{t("Authenticator code")}</span>
             <input
@@ -164,7 +198,15 @@ export function TwoFactorPanel() {
           </label>
           {error ? <p className="form-error">{error}</p> : null}
           <div className="form-row">
-            <button type="button" className="text-button" onClick={() => { setTurningOff(false); setError(""); setCode(""); }}>
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => {
+                setTurningOff(false);
+                setError("");
+                setCode("");
+              }}
+            >
               {t("Cancel")}
             </button>
             <button className="btn btn-primary" type="submit">
@@ -174,7 +216,11 @@ export function TwoFactorPanel() {
         </form>
       ) : enabled ? (
         <div className="stack">
-          <p className="muted">{t("{count} recovery codes left.", { count: user.recoveryCodes?.length ?? 0 })}</p>
+          <p className="muted">
+            {t("{count} recovery codes left.", {
+              count: user.recoveryCodes?.length ?? 0,
+            })}
+          </p>
           <form className="stack" onSubmit={renew}>
             <label className="field">
               <span>{t("6-digit code")}</span>
@@ -194,7 +240,15 @@ export function TwoFactorPanel() {
               <button className="btn btn-ghost" type="submit">
                 {t("New recovery codes")}
               </button>
-              <button type="button" className="text-button" onClick={() => { setTurningOff(true); setCode(""); setError(""); }}>
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => {
+                  setTurningOff(true);
+                  setCode("");
+                  setError("");
+                }}
+              >
                 {t("Turn off authenticator")}
               </button>
             </div>

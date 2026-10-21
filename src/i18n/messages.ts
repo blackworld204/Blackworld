@@ -1,4 +1,10 @@
 import { ar } from "@/i18n/ar";
+import fil from "@/i18n/catalogs/fil.json";
+import id from "@/i18n/catalogs/id.json";
+import ms from "@/i18n/catalogs/ms.json";
+import ro from "@/i18n/catalogs/ro.json";
+import ru from "@/i18n/catalogs/ru.json";
+import th from "@/i18n/catalogs/th.json";
 import { de } from "@/i18n/de";
 import { es } from "@/i18n/es";
 import { fr } from "@/i18n/fr";
@@ -30,4 +36,11 @@ export const catalog: Record<string, Record<string, string>> = {
   ko: fill(ko, rowsAsia, 3),
   hi: fill(hi, rowsAsia, 4),
   ar: fill(ar, rowsAsia, 5),
+  id,
+  ms,
+  ro,
+  ru,
+  th,
+  fil,
+  tl: fil,
 };

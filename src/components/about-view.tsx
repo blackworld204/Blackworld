@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import { useI18n } from "@/i18n/provider";
-import { CONTACT_EMAIL, CONTACT_PHONE, CONTACT_PHONE_DISPLAY } from "@/lib/contact";
+import {
+  CONTACT_EMAIL,
+  CONTACT_PHONE,
+  CONTACT_PHONE_DISPLAY,
+} from "@/lib/contact";
 
 export function AboutView() {
   const { t } = useI18n();

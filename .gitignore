@@ -1,4 +1,5 @@
 node_modules
+data/i18n-cache
 .next
 out
 .DS_Store
