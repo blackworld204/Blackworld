@@ -6,7 +6,7 @@ import { Glyph } from "@/components/glyph";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
 import { downloadCsv } from "@/lib/csv";
-import { MONEY, money, when, type MoneyCode } from "@/lib/bank";
+import { MONEY, localeTag, money, when, type BankTx, type MoneyCode } from "@/lib/bank";
 
 export default function TransactionsPage() {
   const { state, user } = useAccount();
@@ -60,7 +60,7 @@ export default function TransactionsPage() {
           </button>
         ))}
       </div>
-      <div className="filter-row" role="group" aria-label={t("Currency")}>
+      <div className="filter-row tx-currencies" role="group" aria-label={t("Currency")}>
         <button type="button" className="btn btn-ghost btn-sm" aria-pressed={currency === "all"} onClick={() => setCurrency("all")}>
           {t("All")}
         </button>
@@ -92,7 +92,12 @@ export default function TransactionsPage() {
       <ul className="tx-list">
         {rows.map((tx) => (
           <li key={tx.id}>
-            <button type="button" className="tx-button" onClick={() => setOpen(open === tx.id ? null : tx.id)}>
+            <button
+              type="button"
+              className="tx-button"
+              aria-expanded={open === tx.id}
+              onClick={() => setOpen(open === tx.id ? null : tx.id)}
+            >
               <span className="tx-main">
                 <span className={tx.direction === "in" ? "tx-mark" : "tx-mark is-out"}>
                   <Glyph name={tx.direction === "in" ? "in" : "out"} />
@@ -109,13 +114,62 @@ export default function TransactionsPage() {
               </span>
             </button>
             {open === tx.id ? (
-              <p className="muted tx-detail">
-                {t(tx.detail)} · {when(tx.at, locale)} · {tx.id}
-              </p>
+              <Receipt tx={tx} name={user.name} email={user.email} locale={locale} />
             ) : null}
           </li>
         ))}
       </ul>
     </div>
+  );
+}
+
+function issuedAt(iso: string, locale: string) {
+  return new Intl.DateTimeFormat(localeTag(locale), {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(iso));
+}
+
+function printReceipt() {
+  document.documentElement.classList.add("print-receipt");
+  const done = () => {
+    document.documentElement.classList.remove("print-receipt");
+    window.removeEventListener("afterprint", done);
+  };
+  window.addEventListener("afterprint", done);
+  window.print();
+}
+
+function Receipt({ tx, name, email, locale }: { tx: BankTx; name: string; email: string; locale: string }) {
+  const { t } = useI18n();
+  return (
+    <article className="tx-detail receipt-sheet">
+      <p className="kicker">{t("Receipt")}</p>
+      <h2>{t(tx.title)}</h2>
+      <p className="muted">{t(tx.detail)}</p>
+      <p className={tx.direction === "in" ? "mono receipt-amount tx-in" : "mono receipt-amount"}>
+        <CurrencyFlag code={tx.currency} />
+        {tx.direction === "in" ? "+" : "−"}
+        {money(tx.amount, tx.currency, locale)}
+      </p>
+      <dl className="receipt-lines">
+        <dt>{t("Reference")}</dt>
+        <dd className="mono">{tx.id}</dd>
+        <dt>{t("Date")}</dt>
+        <dd>{issuedAt(tx.at, locale)}</dd>
+        <dt>{t("Direction")}</dt>
+        <dd>{tx.direction === "in" ? t("Money in") : t("Money out")}</dd>
+        <dt>{t("Issued to")}</dt>
+        <dd>
+          {name}
+          <span className="muted"> · {email}</span>
+        </dd>
+      </dl>
+      <div className="receipt-actions no-print">
+        <button type="button" className="btn btn-ghost btn-sm" onClick={printReceipt}>
+          {t("Print receipt")}
+        </button>
+      </div>
+    </article>
   );
 }

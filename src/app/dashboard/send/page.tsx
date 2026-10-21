@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { BankFields } from "@/components/bank-fields";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CurrencyFlag } from "@/components/currency-flag";
 import { CurrencySelect } from "@/components/currency-select";
@@ -9,9 +10,11 @@ import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
 import { MONEY, addApproval, addPayee, money, needsApproval, payTransfer, removePayee, type MoneyCode } from "@/lib/bank";
+import { countryOfBank, swiftOfBank } from "@/lib/banks";
 
 type Draft = {
   holder: string;
+  country: string;
   bank: string;
   routing: string;
   swift: string;
@@ -23,6 +26,7 @@ type Draft = {
 
 const blank: Draft = {
   holder: "",
+  country: "US",
   bank: "",
   routing: "",
   swift: "",
@@ -60,7 +64,7 @@ export default function SendPage() {
   function review(event: React.FormEvent) {
     event.preventDefault();
     if (draft.holder.trim().length < 2) return setError(t("Enter the account holder."));
-    if (draft.bank.trim().length < 2) return setError(t("Enter the bank name."));
+    if (!draft.bank) return setError(t("Choose a bank"));
     if (draft.account.trim().length < 4) return setError(t("Enter the account number."));
     if (draft.routing.trim().length < 4 && draft.swift.trim().length < 6) {
       return setError(t("Enter a US routing number or a SWIFT code."));
@@ -204,6 +208,7 @@ export default function SendPage() {
                           setDraft((current) => ({
                             ...current,
                             holder: payee.holder,
+                            country: countryOfBank(payee.bank),
                             bank: payee.bank,
                             routing: payee.routing,
                             swift: payee.swift,
@@ -230,10 +235,14 @@ export default function SendPage() {
             <span>{t("Account holder")}</span>
             <input value={draft.holder} onChange={(event) => set("holder", event.target.value)} />
           </label>
-          <label className="field">
-            <span>{t("Bank name")}</span>
-            <input value={draft.bank} onChange={(event) => set("bank", event.target.value)} />
-          </label>
+          <BankFields
+            country={draft.country}
+            bank={draft.bank}
+            onCountry={(code) => setDraft((current) => ({ ...current, country: code, bank: "", swift: "" }))}
+            onBank={(name) =>
+              setDraft((current) => ({ ...current, bank: name, swift: swiftOfBank(current.country, name) }))
+            }
+          />
           <div className="split">
             <label className="field">
               <span>{t("Routing number")}</span>

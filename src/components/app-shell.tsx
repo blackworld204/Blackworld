@@ -39,11 +39,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setOpen(false);
-    const nav = document.querySelector(".app-nav");
-    const current = nav?.querySelector("[aria-current='page']");
-    if (!(nav instanceof HTMLElement) || !(current instanceof HTMLElement)) return;
-    const left = current.offsetLeft - (nav.clientWidth - current.offsetWidth) / 2;
-    nav.scrollTo({ left: Math.max(0, left) });
+    const current = document.querySelector(".app-side [aria-current='page']");
+    if (current instanceof HTMLElement) current.scrollIntoView({ block: "nearest" });
   }, [path]);
 
   useEffect(() => {
@@ -71,8 +68,41 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return subscribeBank(read);
   }, [session]);
 
+  const accountLinks = () => (
+    <>
+      {LINKS.map((link) => {
+        const current = link.href === "/dashboard" ? path === "/dashboard" : path.startsWith(link.href);
+        const count = link.href === "/dashboard/notifications" && unread > 0 ? unread : 0;
+        return (
+          <Link key={link.href} href={link.href} aria-current={current ? "page" : undefined} onClick={() => setOpen(false)}>
+            <span>{t(link.label)}</span>
+            {count > 0 ? <span className="app-nav-count">{count}</span> : null}
+          </Link>
+        );
+      })}
+      {admin ? (
+        <Link href="/dashboard/admin" aria-current={path.startsWith("/dashboard/admin") ? "page" : undefined} onClick={() => setOpen(false)}>
+          {t("Admin")}
+        </Link>
+      ) : null}
+    </>
+  );
+
   return (
     <div className="app">
+      <aside className="app-side">
+        <Link href="/dashboard" className="brand" aria-label={t("Blackworld, dashboard")}>
+          <Mark />
+          <span>Blackworld</span>
+        </Link>
+        <nav className="app-nav" aria-label={t("Account")}>
+          {accountLinks()}
+        </nav>
+        <button type="button" className="app-side-out" onClick={signOut}>
+          {t("Sign out")}
+        </button>
+      </aside>
+      <div className="app-column">
       <div className="app-head">
       <header className="app-bar">
         <Link href="/dashboard" className="brand" aria-label={t("Blackworld, dashboard")}>
@@ -82,10 +112,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="app-bar-actions">
           <ConnectionMark />
           <LanguageSelect />
-          <Link href="/dashboard/notifications" className="text-button app-bell" aria-label={t("Notifications")}>
-            <Glyph name="bell" />
+          <Link
+            href="/dashboard/notifications"
+            className="text-button app-bell"
+            aria-label={unread > 0 ? `${t("Notifications")}, ${unread}` : t("Notifications")}
+          >
+            <span className="app-bell-icon">
+              <Glyph name="bell" />
+              {unread > 0 ? <span className="app-count">{unread}</span> : null}
+            </span>
             <span className="app-bell-label">{t("Notifications")}</span>
-            {unread > 0 ? <span className="app-count">{unread}</span> : null}
           </Link>
           <button
             type="button"
@@ -96,30 +132,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           >
             {t("Menu")}
           </button>
-          <span className="mono session-email">{session?.email}</span>
-          <button type="button" className="text-button session-signout" onClick={signOut}>
-            {t("Sign out")}
-          </button>
+          <span className="app-account">
+            <span className="mono session-email">{session?.email}</span>
+            <button type="button" className="text-button session-signout" onClick={signOut}>
+              {t("Sign out")}
+            </button>
+          </span>
         </div>
       </header>
-      <nav className="app-nav" aria-label={t("Account")}>
-        {LINKS.map((link) => {
-          const current = link.href === "/dashboard" ? path === "/dashboard" : path.startsWith(link.href);
-          return (
-            <Link key={link.href} href={link.href} aria-current={current ? "page" : undefined}>
-              {t(link.label)}
-            </Link>
-          );
-        })}
-        {admin ? (
-          <Link href="/dashboard/admin" aria-current={path.startsWith("/dashboard/admin") ? "page" : undefined}>
-            {t("Admin")}
-          </Link>
-        ) : null}
-        <button type="button" className="app-nav-out" onClick={signOut}>
-          {t("Sign out")}
-        </button>
-      </nav>
       {open ? (
         <div className="menu app-menu" id="account-menu" role="dialog" aria-label={t("Menu")}>
           <div className="menu-top">
@@ -133,20 +153,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <nav className="menu-links" aria-label={t("Account")}>
             {session ? <p className="menu-email">{session.email}</p> : null}
-            {LINKS.map((link) => {
-              const current = link.href === "/dashboard" ? path === "/dashboard" : path.startsWith(link.href);
-              return (
-                <Link key={link.href} href={link.href} aria-current={current ? "page" : undefined} onClick={() => setOpen(false)}>
-                  {t(link.label)}
-                  {link.href === "/dashboard/notifications" && unread > 0 ? ` ${unread}` : ""}
-                </Link>
-              );
-            })}
-            {admin ? (
-              <Link href="/dashboard/admin" onClick={() => setOpen(false)}>
-                {t("Admin")}
-              </Link>
-            ) : null}
+            {accountLinks()}
             <button type="button" className="menu-signout" onClick={signOut}>
               {t("Sign out")}
             </button>
@@ -155,6 +162,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       ) : null}
       </div>
       <div className="app-main" key={path}>{children}</div>
+      </div>
     </div>
   );
 }

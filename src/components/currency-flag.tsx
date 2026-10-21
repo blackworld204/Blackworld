@@ -196,6 +196,32 @@ const FLAGS: Record<string, ReactNode> = {
 
 const SHARED: Record<string, string> = {
   en: "USD",
+  US: "USD",
+  GB: "GBP",
+  CA: "CAD",
+  AU: "AUD",
+  SG: "SGD",
+  JP: "JPY",
+  CN: "CNY",
+  IN: "hi",
+  CH: "CHF",
+  DE: "de",
+  FR: "fr",
+  ES: "es",
+  ZA: "za",
+  NG: "ng",
+  GH: "gh",
+  KE: "ke",
+  BR: "br",
+  MX: "mx",
+  AE: "ae",
+  PR: "pr",
+  NGN: "ng",
+  INR: "hi",
+  ZAR: "za",
+  AED: "ae",
+  BRL: "br",
+  MXN: "mx",
   zh: "CNY",
   ja: "JPY",
   ta: "hi",
@@ -228,6 +254,10 @@ const BANDS: Record<string, { axis: "h" | "v"; colors: string[] }> = {
   ms: { axis: "h", colors: ["#CC0001", "#fff", "#CC0001", "#fff", "#CC0001", "#fff"] },
   am: { axis: "h", colors: ["#078930", "#FCDD09", "#DA121A"] },
   fa: { axis: "h", colors: ["#239F40", "#fff", "#DA0000"] },
+  ng: { axis: "v", colors: ["#008751", "#fff", "#008751"] },
+  gh: { axis: "h", colors: ["#CE1126", "#FCD116", "#006B3F"] },
+  ke: { axis: "h", colors: ["#000", "#BB0000", "#006600"] },
+  mx: { axis: "v", colors: ["#006847", "#fff", "#CE1126"] },
 };
 
 function bands(axis: "h" | "v", colors: string[]) {
@@ -332,6 +362,30 @@ const EXTRA: Record<string, ReactNode> = {
       <polygon points="0,42 60,42 60,27 22,27" fill="#002395" />
       <polygon points="0,8 16,21 0,34" fill="#000" />
       <polygon points="0,12 12,21 0,30" fill="#FFB612" />
+    </>
+  ),
+  br: (
+    <>
+      <rect width="60" height="42" fill="#009C3B" />
+      <polygon points="30,6 54,21 30,36 6,21" fill="#FFDF00" />
+      <circle cx="30" cy="21" r="7" fill="#002776" />
+    </>
+  ),
+  ae: (
+    <>
+      <rect width="60" height="14" fill="#00732F" />
+      <rect y="14" width="60" height="14" fill="#fff" />
+      <rect y="28" width="60" height="14" fill="#000" />
+      <rect width="16" height="42" fill="#FF0000" />
+    </>
+  ),
+  pr: (
+    <>
+      {Array.from({ length: 5 }, (_, index) => (
+        <rect key={index} y={(42 / 5) * index} width="60" height={42 / 5 + 0.2} fill={index % 2 ? "#fff" : "#ED0000"} />
+      ))}
+      <polygon points="0,0 26,21 0,42" fill="#0050F0" />
+      <polygon points={star(10, 21, 3)} fill="#fff" />
     </>
   ),
   fil: (

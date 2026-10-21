@@ -9,6 +9,12 @@ const QUOTES: { symbol: string; code: string; invert: boolean }[] = [
   { symbol: "USDCNY=X", code: "CNY", invert: false },
   { symbol: "AUDUSD=X", code: "AUD", invert: true },
   { symbol: "USDSGD=X", code: "SGD", invert: false },
+  { symbol: "USDNGN=X", code: "NGN", invert: false },
+  { symbol: "USDINR=X", code: "INR", invert: false },
+  { symbol: "USDZAR=X", code: "ZAR", invert: false },
+  { symbol: "USDAED=X", code: "AED", invert: false },
+  { symbol: "USDBRL=X", code: "BRL", invert: false },
+  { symbol: "USDMXN=X", code: "MXN", invert: false },
 ];
 
 type Listener = (book: RateBook) => void;

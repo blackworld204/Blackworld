@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { BankFields } from "@/components/bank-fields";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
 import { MONEY, addSchedule, cancelSchedule, money, type MoneyCode } from "@/lib/bank";
+import { swiftOfBank } from "@/lib/banks";
 import { CurrencySelect } from "@/components/currency-select";
 
 const statusLabel = {
@@ -19,6 +21,7 @@ export default function SchedulePage() {
   const { state, user } = useAccount();
   const { t, locale } = useI18n();
   const [holder, setHolder] = useState("");
+  const [country, setCountry] = useState("US");
   const [bank, setBank] = useState("");
   const [routing, setRouting] = useState("");
   const [swift, setSwift] = useState("");
@@ -39,7 +42,7 @@ export default function SchedulePage() {
     event.preventDefault();
     const value = Number(amount);
     if (holder.trim().length < 2) return setError(t("Enter the account holder."));
-    if (bank.trim().length < 2) return setError(t("Enter the bank name."));
+    if (!bank) return setError(t("Choose a bank"));
     if (account.trim().length < 4) return setError(t("Enter the account number."));
     if (routing.trim().length < 4 && swift.trim().length < 6) return setError(t("Enter a US routing number or a SWIFT code."));
     if (!Number.isFinite(value) || value <= 0) return setError(t("Enter an amount greater than zero."));
@@ -112,10 +115,19 @@ export default function SchedulePage() {
           <span>{t("Account holder")}</span>
           <input value={holder} onChange={(event) => setHolder(event.target.value)} />
         </label>
-        <label className="field">
-          <span>{t("Bank name")}</span>
-          <input value={bank} onChange={(event) => setBank(event.target.value)} />
-        </label>
+        <BankFields
+          country={country}
+          bank={bank}
+          onCountry={(code) => {
+            setCountry(code);
+            setBank("");
+            setSwift("");
+          }}
+          onBank={(name) => {
+            setBank(name);
+            setSwift(swiftOfBank(country, name));
+          }}
+        />
         <div className="split">
           <label className="field">
             <span>{t("Routing number")}</span>

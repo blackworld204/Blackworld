@@ -1,4 +1,6 @@
-export type MoneyCode = "USD" | "EUR" | "GBP";
+import { CURRENCIES, balancesOf, emptyBalances, isMoneyCode, type MoneyCode } from "@/lib/currencies";
+
+export type { MoneyCode };
 
 export type BankUser = {
   id: string;
@@ -161,11 +163,11 @@ export type BankState = {
   events: BankEvent[];
 };
 
-export const MONEY: { code: MoneyCode; name: string; symbol: string }[] = [
-  { code: "USD", name: "US Dollar", symbol: "$" },
-  { code: "EUR", name: "Euro", symbol: "€" },
-  { code: "GBP", name: "British Pound", symbol: "£" },
-];
+export const MONEY: { code: MoneyCode; name: string; symbol: string }[] = CURRENCIES.map((item) => ({
+  code: item.code,
+  name: item.name,
+  symbol: item.symbol,
+}));
 
 const KEY = "blackworld-bank";
 const EVENT = "blackworld-bank";
@@ -183,7 +185,7 @@ export function seedBank(): BankState {
         role: "admin",
         status: "active",
         canCreate: true,
-        balances: { USD: 50000, EUR: 0, GBP: 0 },
+        balances: emptyBalances(50000),
         memberSince: "2024-03-12",
         pin: "2580",
       },
@@ -195,7 +197,7 @@ export function seedBank(): BankState {
         role: "admin",
         status: "inactive",
         canCreate: false,
-        balances: { USD: 0, EUR: 0, GBP: 0 },
+        balances: emptyBalances(),
         memberSince: "2025-11-02",
         pin: "1144",
       },
@@ -282,7 +284,8 @@ export function loadBank(): BankState {
         alerts: { ...DEFAULT_ALERTS, ...user.alerts },
         privacy: { ...DEFAULT_PRIVACY, ...user.privacy },
         hasPhoto: Boolean(user.hasPhoto),
-        displayCurrency: user.displayCurrency ?? "USD",
+        balances: balancesOf(user.balances),
+        displayCurrency: user.displayCurrency && isMoneyCode(user.displayCurrency) ? user.displayCurrency : "USD",
         approvalLimit: typeof user.approvalLimit === "number" ? user.approvalLimit : 10000,
       })),
       txs: parsed.txs ?? [],
@@ -339,10 +342,12 @@ export function localeTag(locale: string) {
 }
 
 export function money(amount: number, code: MoneyCode, locale = "en") {
+  const digits = code === "JPY" ? 0 : 2;
   return new Intl.NumberFormat(localeTag(locale), {
     style: "currency",
     currency: code,
-    minimumFractionDigits: 2,
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
   }).format(amount);
 }
 
@@ -432,7 +437,7 @@ export function addUser(input: {
     role: "member",
     status: "active",
     canCreate: false,
-    balances: { USD: input.balance, EUR: 0, GBP: 0 },
+    balances: emptyBalances(input.balance),
     memberSince: new Date().toISOString().slice(0, 10),
     pin: input.pin,
     address: input.address,

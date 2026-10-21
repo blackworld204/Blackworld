@@ -1,12 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { BankFields } from "@/components/bank-fields";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CurrencySelect } from "@/components/currency-select";
 import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
 import { MONEY, addApproval, money, needsApproval, payTransfer, transferFee, type MoneyCode } from "@/lib/bank";
+import { swiftOfBank } from "@/lib/banks";
+import { emptyBalances } from "@/lib/currencies";
 
 type Line = { holder: string; account: string; amount: string; currency: MoneyCode };
 
@@ -15,6 +18,7 @@ const empty = (): Line => ({ holder: "", account: "", amount: "", currency: "USD
 export default function BatchPage() {
   const { user } = useAccount();
   const { t, locale } = useI18n();
+  const [country, setCountry] = useState("US");
   const [bank, setBank] = useState("");
   const [routing, setRouting] = useState("");
   const [swift, setSwift] = useState("");
@@ -34,7 +38,7 @@ export default function BatchPage() {
   function submit(event: React.FormEvent) {
     event.preventDefault();
     if (busy) return;
-    if (bank.trim().length < 2) return setError(t("Enter the bank name."));
+    if (!bank) return setError(t("Choose a bank"));
     if (routing.trim().length < 4 && swift.trim().length < 6) return setError(t("Enter a US routing number or a SWIFT code."));
     if (pin !== user?.pin) return setError(t("PIN does not match this account. The 4-digit PIN is under Security."));
     const ready = lines
@@ -46,7 +50,7 @@ export default function BatchPage() {
       if (line.account.trim().length < 4) return setError(t("Enter the account number."));
       if (!Number.isFinite(line.value) || line.value <= 0) return setError(t("Enter an amount greater than zero."));
     }
-    const need: Record<MoneyCode, number> = { USD: 0, EUR: 0, GBP: 0 };
+    const need = emptyBalances();
     for (const line of ready) {
       need[line.currency] = Math.round((need[line.currency] + line.value + transferFee(line.value)) * 100) / 100;
     }
@@ -117,10 +121,19 @@ export default function BatchPage() {
         <p className="lede">{t("Each line is a separate transfer with a 1% fee. Members above the approval limit wait for an admin.")}</p>
       </header>
       <form className="stack" onSubmit={submit}>
-        <label className="field">
-          <span>{t("Bank name")}</span>
-          <input value={bank} onChange={(event) => setBank(event.target.value)} />
-        </label>
+        <BankFields
+          country={country}
+          bank={bank}
+          onCountry={(code) => {
+            setCountry(code);
+            setBank("");
+            setSwift("");
+          }}
+          onBank={(name) => {
+            setBank(name);
+            setSwift(swiftOfBank(country, name));
+          }}
+        />
         <div className="split">
           <label className="field">
             <span>{t("Routing number")}</span>

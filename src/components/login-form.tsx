@@ -7,7 +7,8 @@ import { useSession } from "@/components/session";
 import { useI18n } from "@/i18n/provider";
 import { consumeRecoveryCode, loadBank, userByEmail } from "@/lib/bank";
 import { verifyTotp } from "@/lib/totp";
-import { CONTACT_EMAIL } from "@/lib/contact";
+
+const DEMO_EMAIL = "johnsmith@gmail.com";
 
 function validEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -17,7 +18,7 @@ export function LoginForm() {
   const router = useRouter();
   const { session, signIn, signOut } = useSession();
   const { t } = useI18n();
-  const [email, setEmail] = useState(CONTACT_EMAIL);
+  const [email, setEmail] = useState(DEMO_EMAIL);
   const [password, setPassword] = useState("");
   const [pin, setPin] = useState("");
   const [code, setCode] = useState("");
