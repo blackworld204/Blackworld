@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { BankFields } from "@/components/bank-fields";
+import { BusyButton } from "@/components/busy-button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CurrencySelect } from "@/components/currency-select";
 import { toast } from "@/components/toast";
@@ -40,7 +41,7 @@ export default function BatchPage() {
     if (busy) return;
     if (!bank) return setError(t("Choose a bank"));
     if (routing.trim().length < 4 && swift.trim().length < 6) return setError(t("Enter a US routing number or a SWIFT code."));
-    if (pin !== user?.pin) return setError(t("PIN does not match this account. The 4-digit PIN is under Security."));
+    if (pin !== user?.pin) return setError(t("PIN does not match this account."));
     const ready = lines
       .map((line) => ({ ...line, value: Number(line.amount) }))
       .filter((line) => line.holder.trim() || line.account.trim() || line.amount.trim());
@@ -94,7 +95,7 @@ export default function BatchPage() {
       paid += 1;
     }
     setDone({ paid, held });
-    toast(t("Batch recorded in this browser."));
+    toast(t("Batch sent."));
   }
 
   if (done) {
@@ -106,7 +107,7 @@ export default function BatchPage() {
           <p className="lede">
             {done.held > 0
               ? t("{count} waiting for approval.", { count: done.held })
-              : t("Recorded in this browser. Not a live bank transfer.")}
+              : t("The batch is on the account.")}
           </p>
         </header>
       </div>
@@ -182,18 +183,18 @@ export default function BatchPage() {
           {t("Add a line")}
         </button>
         <label className="field">
-          <span>{t("4-digit PIN")}</span>
+          <span>{t("PIN")}</span>
           <input type="password" inputMode="numeric" autoComplete="off" maxLength={4} value={pin} onChange={(event) => setPin(event.target.value)} />
         </label>
         {error ? <p className="form-error">{error}</p> : null}
-        <button className="btn btn-primary" type="submit" disabled={busy}>
+        <BusyButton className="btn btn-primary" type="submit" busy={busy}>
           {t("Send batch")}
-        </button>
+        </BusyButton>
       </form>
       <ConfirmDialog
         open={pending !== null}
         title={t("Send this batch?")}
-        body={t("{count} transfers are recorded in this browser.", { count: pending?.length ?? 0 })}
+        body={t("{count} transfers will be sent.", { count: pending?.length ?? 0 })}
         confirmLabel={t("Send batch")}
         onClose={() => setPending(null)}
         onConfirm={sendPending}

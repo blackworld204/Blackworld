@@ -54,14 +54,11 @@ export function DocsView() {
         <div className="docs-meta">
           <code>https://api.blackworld.com</code>
           <CopyButton value="https://api.blackworld.com" label="Copy base URL" />
-          <code>Authorization: Bearer sk_test_…</code>
+          <code>Authorization: Bearer</code>
         </div>
         <div className="prose docs-intro">
           <p>
-            {t(
-              "Sandbox base URL is {url}. SDKs ship for Node.js, Python, Ruby, and PHP. Webhooks cover account, card, and payment events.",
-              { url: "https://sandbox.blackworld.com" },
-            )}
+            {t("SDKs ship for Node.js, Python, Ruby, and PHP. Webhooks cover account, card, and payment events.")}
           </p>
         </div>
         <div>
@@ -80,7 +77,7 @@ export function DocsView() {
             {t("Apply for partnership")}
           </Link>
           <Link className="btn btn-ghost" href="/#developers">
-            {t("See the sample")}
+            {t("Accounts, cards, and payments")}
           </Link>
         </div>
       </div>

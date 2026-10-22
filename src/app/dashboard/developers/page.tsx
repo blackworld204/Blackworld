@@ -41,11 +41,11 @@ export default function DevelopersPage() {
     <div className="app-pad">
       <header className="app-intro">
         <p className="kicker">{t("Developers")}</p>
-        <h1>{t("Sandbox")}</h1>
-        <p className="lede">{t("The key and the event list stay in this browser. A saved webhook URL is not called.")}</p>
+        <h1>{t("API keys")}</h1>
+        <p className="lede">{t("Keys and events for this account.")}</p>
       </header>
       <section className="stack">
-        <h2>{t("Sandbox key")}</h2>
+        <h2>{t("API key")}</h2>
         <p className="mono">{user.apiKey ?? t("No key yet.")}</p>
         <div className="form-row">
           <button
@@ -97,8 +97,8 @@ export default function DevelopersPage() {
       </ul>
       <ConfirmDialog
         open={askRotate}
-        title={t("Rotate the sandbox key?")}
-        body={t("The current key stops working in this browser.")}
+        title={t("Rotate this key?")}
+        body={t("The current key stops working.")}
         confirmLabel={t("Rotate key")}
         onClose={() => setAskRotate(false)}
         onConfirm={() => {

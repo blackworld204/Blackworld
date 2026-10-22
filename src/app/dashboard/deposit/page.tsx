@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { BusyButton } from "@/components/busy-button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CopyButton } from "@/components/copy-button";
 import { CurrencyFlag } from "@/components/currency-flag";
@@ -49,7 +50,7 @@ export default function DepositPage() {
       title: method === "wire" ? "Wire deposit" : "Card deposit",
       detail:
         method === "wire"
-          ? `Recorded in this browser · fee ${money(fee, "USD", locale)}`
+          ? `Fee ${money(fee, "USD", locale)}`
           : `Card •••• ${card?.last4 ?? ""} · fee ${money(fee, "USD", locale)}`,
       amount: credit,
       direction: "in",
@@ -59,7 +60,7 @@ export default function DepositPage() {
       return setError(failed);
     }
     setError("");
-    toast(t("Deposit recorded in this browser."));
+    toast(t("Deposit recorded."));
     setDone(credit);
   }
 
@@ -69,7 +70,7 @@ export default function DepositPage() {
         <header className="app-intro">
           <p className="kicker">{t("Deposit received")}</p>
           <h1>{money(done, "USD", locale)}</h1>
-          <p className="lede">{t("Recorded in this browser. The credit is the amount after the 2.5% fee.")}</p>
+          <p className="lede">{t("The credit is the amount after the 2.5% fee.")}</p>
         </header>
         <Link className="btn btn-primary" href="/dashboard">
           {t("Back to dashboard")}
@@ -84,7 +85,7 @@ export default function DepositPage() {
         <p className="kicker">{t("Deposit")}</p>
         <h1>{t("Add funds")}</h1>
         <p className="lede">
-          {t("A 2.5% fee is taken before the credit. This records the deposit in this browser. It does not detect a real wire.")}
+          {t("A 2.5% fee is taken before the credit.")}
         </p>
       </header>
       <form className="stack" onSubmit={submit}>
@@ -153,14 +154,14 @@ export default function DepositPage() {
           })}
         </p>
         {error ? <p className="form-error">{error}</p> : null}
-        <button className="btn btn-primary" type="submit" disabled={busy}>
-          {method === "wire" ? t("Record wire on this browser") : t("Record card deposit")}
-        </button>
+        <BusyButton className="btn btn-primary" type="submit" busy={busy}>
+          {method === "wire" ? t("Record wire") : t("Record card deposit")}
+        </BusyButton>
       </form>
       <ConfirmDialog
         open={ask}
         title={t("Record this deposit?")}
-        body={t("You receive {credit} after the fee. It stays in this browser.", {
+        body={t("You receive {credit} after the fee.", {
           credit: money(Math.max(credit, 0), "USD", locale),
         })}
         confirmLabel={t("Record deposit")}

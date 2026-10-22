@@ -4,17 +4,18 @@ import Link from "next/link";
 import { useState } from "react";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
-import { markNote, markNotes, when } from "@/lib/bank";
+import { markNote, markNotes, notesFor, when } from "@/lib/bank";
 
 export default function NotificationsPage() {
-  const { state } = useAccount();
+  const { state, user } = useAccount();
   const { t, locale } = useI18n();
   const [filter, setFilter] = useState<"all" | "unread">("all");
 
-  if (!state) return <div className="app-hold" />;
+  if (!state || !user) return <div className="app-hold" />;
 
-  const unread = state.notes.filter((note) => !note.read).length;
-  const notes = state.notes.filter((note) => filter === "all" || !note.read);
+  const mine = notesFor(state, user.id);
+  const unread = mine.filter((note) => !note.read).length;
+  const notes = mine.filter((note) => filter === "all" || !note.read);
 
   return (
     <div className="app-pad">
@@ -34,7 +35,7 @@ export default function NotificationsPage() {
           {t("Unread")}
         </button>
         {unread > 0 ? (
-          <button type="button" className="btn btn-sm" onClick={() => markNotes(true)}>
+          <button type="button" className="btn btn-sm" onClick={() => markNotes(user.id, true)}>
             {t("Mark all read")}
           </button>
         ) : null}

@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { openLiveChat } from "@/components/live-chat";
 import { useSession } from "@/components/session";
 import { useI18n } from "@/i18n/provider";
-import { CONTACT_EMAIL, CONTACT_PHONE, CONTACT_PHONE_DISPLAY } from "@/lib/contact";
+import { CONTACT_EMAIL, CONTACT_PHONE, CONTACT_PHONE_DISPLAY, CONTACT_WHATSAPP } from "@/lib/contact";
 
 const QUESTIONS = [
   {
@@ -14,11 +14,11 @@ const QUESTIONS = [
   },
   {
     q: "How do I reach a person?",
-    a: `Open live chat, call ${CONTACT_PHONE_DISPLAY}, or write to ${CONTACT_EMAIL}. A reply goes to the email you enter.`,
+    a: `Open live chat, call or WhatsApp ${CONTACT_PHONE_DISPLAY}, or write to ${CONTACT_EMAIL}. A reply goes to the email you enter.`,
   },
   {
     q: "How soon will you reply?",
-    a: "Live chat is on this site through tawk.to. If the desk is away, a reply still goes out within one business day.",
+    a: "Live chat is open on this site. A reply goes out within one business day.",
   },
   {
     q: "Where is Blackworld licensed?",
@@ -26,15 +26,15 @@ const QUESTIONS = [
   },
   {
     q: "How do I send or exchange money?",
-    a: "Sign in and open Send. The account PIN authorizes the transfer. Exchange uses the ECB reference rate and a 0.5% fee.",
+    a: "Transfers and exchange are on the account. Exchange uses the ECB reference rate and a 0.5% fee.",
   },
   {
     q: "Where is the API?",
-    a: "The docs cover accounts, cards, payments, and foreign exchange. The sandbox base URL is https://sandbox.blackworld.com.",
+    a: "The API covers accounts, cards, payments, and foreign exchange.",
   },
   {
     q: "I cannot sign in.",
-    a: "The password needs at least 8 characters. The session stays in this browser. Change the transfer PIN from Security after you sign in.",
+    a: "Use the work email and password on the account.",
   },
 ];
 
@@ -78,6 +78,15 @@ export function SupportCenter({ desk = false }: { desk?: boolean }) {
             <dd>
               <a href={`tel:${CONTACT_PHONE}`}>{CONTACT_PHONE_DISPLAY}</a>
               <span className="muted">{t("Call this number for support.")}</span>
+            </dd>
+          </div>
+          <div>
+            <dt>{t("WhatsApp")}</dt>
+            <dd>
+              <a href={CONTACT_WHATSAPP} target="_blank" rel="noopener noreferrer">
+                {CONTACT_PHONE_DISPLAY}
+              </a>
+              <span className="muted">{t("Message this number on WhatsApp.")}</span>
             </dd>
           </div>
           {desk ? null : (

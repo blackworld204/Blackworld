@@ -24,7 +24,7 @@ export function Converter() {
         ? `${t("ECB mid-market")} · ${new Intl.DateTimeFormat(localeTag(locale), { dateStyle: "medium", timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`))}`
         : status === "loading"
           ? t("Loading rates")
-          : t("Sandbox rates");
+          : t("Reference rates");
 
   const from = rates.find((item) => item.code === fromCode) ?? rates[0];
   const to = rates.find((item) => item.code === toCode) ?? rates[1];

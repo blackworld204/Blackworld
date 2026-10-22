@@ -6,6 +6,7 @@ import {
   CONTACT_EMAIL,
   CONTACT_PHONE,
   CONTACT_PHONE_DISPLAY,
+  CONTACT_WHATSAPP,
 } from "@/lib/contact";
 
 export function AboutView() {
@@ -29,6 +30,10 @@ export function AboutView() {
         <p>254 San José Street, San Juan, PR 00901.</p>
         <p>
           <a href={`tel:${CONTACT_PHONE}`}>{CONTACT_PHONE_DISPLAY}</a>
+          {" · "}
+          <a href={CONTACT_WHATSAPP} target="_blank" rel="noopener noreferrer">
+            {t("WhatsApp")}
+          </a>
           {" · "}
           <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
         </p>

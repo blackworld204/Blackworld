@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { BusyButton } from "@/components/busy-button";
 import { CurrencyFlag } from "@/components/currency-flag";
 import { CurrencySelect } from "@/components/currency-select";
 import { toast } from "@/components/toast";
@@ -60,7 +61,7 @@ export default function ExchangePage() {
       setBusy(false);
       return setError(t(failed));
     }
-    toast(t("Exchange recorded in this browser."));
+    toast(t("Exchange recorded."));
     setDone(money(received, to, locale));
   }
 
@@ -70,7 +71,7 @@ export default function ExchangePage() {
         <header className="app-intro">
           <p className="kicker">{t("Exchanged")}</p>
           <h1>{done}</h1>
-          <p className="lede">{t("Recorded in this browser. The new balances are on the dashboard.")}</p>
+          <p className="lede">{t("The new balances are on the dashboard.")}</p>
         </header>
         <button
           className="btn btn-primary"
@@ -95,18 +96,18 @@ export default function ExchangePage() {
         <h1>{t("Convert")}</h1>
         <p className="lede">
           {status === "live" && asOf
-            ? t("Live quotes · {time}. A 0.5% fee is shown before you confirm. Recorded in this browser.", {
+            ? t("Live quotes · {time}. A 0.5% fee is shown before you confirm.", {
                 time: formatQuoteTime(asOf, localeTag(locale)),
               })
             : status === "live" && date
-              ? t("ECB reference rate · {date}. A 0.5% fee is shown before you confirm. Recorded in this browser.", {
+              ? t("ECB reference rate · {date}. A 0.5% fee is shown before you confirm.", {
                   date: new Intl.DateTimeFormat(localeTag(locale), { dateStyle: "medium", timeZone: "UTC" }).format(
                     new Date(`${date}T00:00:00Z`),
                   ),
                 })
             : status === "loading"
-              ? t("Loading the latest rate. A 0.5% fee is shown before you confirm. Recorded in this browser.")
-              : t("Sandbox rates. A 0.5% fee is shown before you confirm. Recorded in this browser.")}
+              ? t("Loading the latest rate. A 0.5% fee is shown before you confirm.")
+              : t("Reference rates. A 0.5% fee is shown before you confirm.")}
         </p>
       </header>
       {!review ? (
@@ -193,9 +194,9 @@ export default function ExchangePage() {
             <button className="text-button" type="button" onClick={() => setReview(false)}>
               {t("Edit")}
             </button>
-            <button className="btn btn-primary" type="button" disabled={busy} onClick={confirm}>
+            <BusyButton className="btn btn-primary" type="button" busy={busy} onClick={confirm}>
               {t("Confirm exchange")}
-            </button>
+            </BusyButton>
           </div>
         </div>
       )}

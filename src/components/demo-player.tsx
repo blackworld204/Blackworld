@@ -7,20 +7,20 @@ const frames = [
   {
     label: "Account",
     kicker: "POST /v1/accounts",
-    title: "Acme Fintech Inc",
-    detail: "acct_1A2B3C4D5E6F7G8H9I · USD · KYC clear",
+    title: "Business account",
+    detail: "USD · Active",
   },
   {
     label: "Card",
     kicker: "POST /v1/cards",
     title: "Virtual · 4412",
-    detail: "Spend limit 25,000 USD · Active in 1.2s",
+    detail: "Spend limit 25,000 USD · Active",
   },
   {
     label: "Payment",
     kicker: "POST /v1/payments",
     title: "240,000.00 USD",
-    detail: "Wire · Singapore · Settled",
+    detail: "Wire · Settled",
   },
 ];
 
@@ -43,7 +43,7 @@ export function DemoPlayer() {
     <div className="page">
       <div className="wrap wide">
         <header className="page-intro">
-          <h1>{t("Demo")}</h1>
+          <h1>{t("Accounts, cards, and payments")}</h1>
         </header>
         <div className="demo-stage" aria-live="polite">
           <p className="kicker kicker-light">
@@ -54,7 +54,7 @@ export function DemoPlayer() {
             <p className="stage-detail">{t(frame.detail)}</p>
           </div>
         </div>
-        <div className="demo-tabs" role="tablist" aria-label={t("Demo steps")}>
+        <div className="demo-tabs" role="tablist" aria-label={t("Steps")}>
           {frames.map((item, itemIndex) => (
             <button
               key={item.label}

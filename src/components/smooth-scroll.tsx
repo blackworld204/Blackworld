@@ -13,13 +13,19 @@ function read(el: HTMLElement) {
   return el === document.documentElement || el === document.body ? window.scrollY : el.scrollTop;
 }
 
+function rootOf(el: HTMLElement) {
+  return el === document.body || el === document.scrollingElement ? document.documentElement : el;
+}
+
 function write(el: HTMLElement, value: number) {
-  el.style.scrollBehavior = "auto";
-  el.scrollTop = value;
+  const root = rootOf(el);
+  root.style.scrollBehavior = "auto";
+  if (root === document.documentElement) window.scrollTo(0, value);
+  else root.scrollTop = value;
 }
 
 function release(el: HTMLElement) {
-  el.style.scrollBehavior = "";
+  rootOf(el).style.scrollBehavior = "";
 }
 
 function limit(el: HTMLElement) {
@@ -57,13 +63,17 @@ export function SmoothScroll() {
       target = current;
     };
 
-    const tick = () => {
+    let last = 0;
+    const tick = (now: number) => {
       const el = pageScroller();
       target = Math.min(limit(el), Math.max(0, target));
-      const next = current + (target - current) * 0.34;
-      if (Math.abs(target - next) < 0.5) {
+      const dt = last ? Math.min(34, now - last) : 16;
+      last = now;
+      const next = current + (target - current) * (1 - Math.exp(-dt / 130));
+      if (Math.abs(target - next) < 0.4) {
         current = target;
         active = false;
+        last = 0;
         write(el, current);
         release(el);
         return;
@@ -82,6 +92,39 @@ export function SmoothScroll() {
       target = Math.min(limit(el), Math.max(0, target + delta));
       if (active) return;
       active = true;
+      last = 0;
+      frame = window.requestAnimationFrame(tick);
+    };
+
+    const destination = (el: HTMLElement, node: HTMLElement) => {
+      const pad = 112;
+      if (el === document.documentElement || el === document.body || el === document.scrollingElement) {
+        return window.scrollY + node.getBoundingClientRect().top - pad;
+      }
+      return el.scrollTop + node.getBoundingClientRect().top - el.getBoundingClientRect().top - pad;
+    };
+
+    const onSeek = (event: Event) => {
+      const detail = (event as CustomEvent<{ top?: number; node?: EventTarget | null; instant?: boolean }>).detail;
+      const node = detail?.node instanceof HTMLElement ? detail.node : null;
+      if (!detail || (!node && typeof detail.top !== "number")) return;
+      const el = pageScroller();
+      const top = Math.min(limit(el), Math.max(0, node ? destination(el, node) : detail.top ?? 0));
+      if (media.matches || detail.instant) {
+        active = false;
+        window.cancelAnimationFrame(frame);
+        current = top;
+        target = top;
+        last = 0;
+        write(el, top);
+        release(el);
+        return;
+      }
+      if (!active) current = read(el);
+      target = top;
+      if (active) return;
+      active = true;
+      last = 0;
       frame = window.requestAnimationFrame(tick);
     };
 
@@ -132,6 +175,7 @@ export function SmoothScroll() {
     sync();
     window.addEventListener("wheel", onWheel, { passive: false });
     window.addEventListener("keydown", onKey);
+    window.addEventListener("bw-seek", onSeek);
     window.addEventListener("pointerdown", stop);
     document.addEventListener("scroll", sync, { capture: true, passive: true });
     media.addEventListener("change", stop);
@@ -139,6 +183,7 @@ export function SmoothScroll() {
       stop();
       window.removeEventListener("wheel", onWheel);
       window.removeEventListener("keydown", onKey);
+      window.removeEventListener("bw-seek", onSeek);
       window.removeEventListener("pointerdown", stop);
       document.removeEventListener("scroll", sync, true);
       media.removeEventListener("change", stop);

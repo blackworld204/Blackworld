@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/i18n/provider";
-import { CONTACT_EMAIL } from "@/lib/contact";
 import { REFERRAL_REWARD, earnReferral, money } from "@/lib/bank";
 
 const audiences = [
@@ -27,7 +26,7 @@ export function ApplyForm() {
   const [step, setStep] = useState(0);
   const [audience, setAudience] = useState("fintech");
   const [company, setCompany] = useState("");
-  const [email, setEmail] = useState(CONTACT_EMAIL);
+  const [email, setEmail] = useState("");
   const [product, setProduct] = useState("full");
   const [error, setError] = useState("");
   const [introduced, setIntroduced] = useState("");
@@ -39,7 +38,7 @@ export function ApplyForm() {
     if (/^BW-[A-Z0-9-]{4,24}$/.test(code)) setIntroduced(code);
   }, []);
 
-  const titles = ["Who should use this?", "Where should we reply?", "What will you launch?"];
+  const titles = ["Where should we reply?", "Who should use this?", "Accounts, cards, and payments."];
 
   if (step === 3) {
     return (
@@ -57,14 +56,14 @@ export function ApplyForm() {
             })}
           </p>
           <p>
-            {t("This application does not open a sign-in. Accounts on the desk are created by an administrator in this browser.")}
+            {t("An administrator opens the account after this application.")}
           </p>
           <div className="form-row">
-            <Link href="/" className="text-button">
-              {t("Home")}
+            <Link href="/docs" className="text-button">
+              {t("API documentation")}
             </Link>
-            <Link href="/docs" className="btn btn-primary">
-              {t("Read the API")}
+            <Link href="/" className="btn btn-primary">
+              {t("Home")}
             </Link>
           </div>
         </div>
@@ -84,7 +83,7 @@ export function ApplyForm() {
           {introduced ? (
             <p className="lede">
               {t("Referred with {code}.", { code: introduced })}{" "}
-              {t("The referrer earns {amount} in this browser when you submit.", {
+              {t("The referrer earns {amount} when you submit.", {
                 amount: money(REFERRAL_REWARD, "USD", locale),
               })}
             </p>
@@ -93,7 +92,7 @@ export function ApplyForm() {
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            if (step === 1) {
+            if (step === 0) {
               if (company.trim().length < 2) {
                 setError(t("Enter the company name."));
                 return;
@@ -108,7 +107,7 @@ export function ApplyForm() {
             setStep((value) => value + 1);
           }}
         >
-          {step === 0 ? (
+          {step === 1 ? (
             <fieldset>
               <legend className="sr-only">{t("Audience")}</legend>
               {audiences.map((item) => (
@@ -125,7 +124,7 @@ export function ApplyForm() {
               ))}
             </fieldset>
           ) : null}
-          {step === 1 ? (
+          {step === 0 ? (
             <>
               <label className="field">
                 <span>{t("Company")}</span>

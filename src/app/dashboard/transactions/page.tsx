@@ -35,7 +35,7 @@ export default function TransactionsPage() {
       <header className="app-intro">
         <p className="kicker">{t("Activity")}</p>
         <h1>{t("Transactions")}</h1>
-        <p className="lede">{t("Search by title or note. Transfer fees appear on their own line. Everything here stays in this browser.")}</p>
+        <p className="lede">{t("Transfers, fees, and deposits.")}</p>
       </header>
       <label className="field">
         <span>{t("Search")}</span>

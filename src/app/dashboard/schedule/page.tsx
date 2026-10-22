@@ -47,7 +47,7 @@ export default function SchedulePage() {
     if (routing.trim().length < 4 && swift.trim().length < 6) return setError(t("Enter a US routing number or a SWIFT code."));
     if (!Number.isFinite(value) || value <= 0) return setError(t("Enter an amount greater than zero."));
     if (!runOn || runOn < today) return setError(t("Choose today or a later date."));
-    if (pin !== user?.pin) return setError(t("PIN does not match this account. The 4-digit PIN is under Security."));
+    if (pin !== user?.pin) return setError(t("PIN does not match this account."));
     const status = addSchedule({
       userId: user!.id,
       holder: holder.trim(),
@@ -77,7 +77,7 @@ export default function SchedulePage() {
           : status === "held"
             ? "Waiting for an admin to approve."
             : status === "paid"
-              ? "Transfer recorded in this browser."
+              ? "Transfer sent."
               : "Scheduled.",
       ),
     );
@@ -88,7 +88,7 @@ export default function SchedulePage() {
       <header className="app-intro">
         <p className="kicker">{t("Schedule")}</p>
         <h1>{t("Pay later")}</h1>
-        <p className="lede">{t("It runs the next time this desk is open on or after the date. The 1% fee is taken then. Nothing is sent to a bank.")}</p>
+        <p className="lede">{t("It runs on or after the date. The 1% fee is taken then.")}</p>
       </header>
       {rows.length === 0 ? <p className="muted">{t("No scheduled transfers.")}</p> : null}
       <ul className="tx-list">
@@ -166,7 +166,7 @@ export default function SchedulePage() {
           <input type="date" min={today} value={runOn} onChange={(event) => setRunOn(event.target.value)} />
         </label>
         <label className="field">
-          <span>{t("4-digit PIN")}</span>
+          <span>{t("PIN")}</span>
           <input type="password" inputMode="numeric" autoComplete="off" maxLength={4} value={pin} onChange={(event) => setPin(event.target.value)} />
         </label>
         {error ? <p className="form-error">{error}</p> : null}

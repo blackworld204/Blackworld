@@ -54,7 +54,7 @@ export function ReferralPanel() {
           <h2 id="referrals-title">{t("Earn {amount}", { amount: reward })}</h2>
           <p>
             {t(
-              "Share your code. The credit lands in this browser when that company applies. It is not a live bank payment.",
+              "Share your code. The credit lands when that company applies.",
             )}
           </p>
           <div className="refer-code">

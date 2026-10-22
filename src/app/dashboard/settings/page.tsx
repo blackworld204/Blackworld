@@ -7,10 +7,11 @@ import { CurrencySelect } from "@/components/currency-select";
 import { LanguageSelect } from "@/components/language-select";
 import { TwoFactorPanel } from "@/components/two-factor";
 import { useAccount } from "@/components/use-account";
-import { useSession } from "@/components/session";
+import { SignOutButton } from "@/components/sign-out-button";
 import { useI18n } from "@/i18n/provider";
 import { MONEY, addNote, alertsOf, patchUser, privacyOf, type BankUser, type MoneyCode } from "@/lib/bank";
 import { clearPhoto, loadPhoto, savePhoto } from "@/lib/photos";
+import { bindFirebasePush, releaseFirebasePush } from "@/lib/firebase-push";
 import { disablePush, enablePush, pushStatus, showPush, type PushStatus } from "@/lib/push";
 
 type Section = "profile" | "security" | "notifications" | "privacy";
@@ -42,7 +43,6 @@ export default function SettingsPage() {
 
 function SettingsForm({ user }: { user: BankUser }) {
   const { t } = useI18n();
-  const { signOut } = useSession();
   const fileRef = useRef<HTMLInputElement>(null);
   const initial = splitName(user.name);
   const [section, setSection] = useState<Section>("profile");
@@ -160,8 +160,9 @@ function SettingsForm({ user }: { user: BankUser }) {
     patchUser(user.id, { pin: pinNext });
     if (alerts.security) {
       addNote({
+        userId: user.id,
         title: "PIN updated",
-        body: "The transfer PIN for this browser was changed.",
+        body: "The transfer PIN for this account was changed.",
       });
     }
     setPinCurrent("");
@@ -207,9 +208,7 @@ function SettingsForm({ user }: { user: BankUser }) {
               {t(item.label)}
             </button>
           ))}
-          <button type="button" className="settings-out" onClick={signOut}>
-            {t("Sign out")}
-          </button>
+          <SignOutButton className="settings-out" />
         </nav>
 
         <div className="settings-panel">
@@ -258,7 +257,7 @@ function SettingsForm({ user }: { user: BankUser }) {
               <ConfirmDialog
                 open={askPhoto}
                 title={t("Remove this photo?")}
-                body={t("The profile photo leaves this browser.")}
+                body={t("The profile photo will be removed.")}
                 confirmLabel={t("Remove photo")}
                 onClose={() => setAskPhoto(false)}
                 onConfirm={() => {
@@ -314,13 +313,10 @@ function SettingsForm({ user }: { user: BankUser }) {
                   checked={Boolean(user.twoFactor)}
                   onChange={(event) => patchUser(user.id, { twoFactor: event.target.checked })}
                 />
-                {t("Ask for the transfer PIN when signing in.")}
+                {t("PIN at sign-in")}
               </label>
-              <p className="muted">
-                {user.twoFactor ? t("Sign-in asks for the 4-digit PIN.") : t("Off. Password length is the only check today.")}
-              </p>
               <TwoFactorPanel />
-              <p className="muted">{t("This session stays in this browser.")} {user.email}</p>
+              <p className="muted">{t("Signed in as")} {user.email}</p>
             </div>
           ) : null}
 
@@ -333,12 +329,12 @@ function SettingsForm({ user }: { user: BankUser }) {
                     <strong>{t("Push")}</strong>
                     <span className="muted">
                       {push === "unsupported"
-                        ? t("This browser does not support push alerts.")
+                        ? t("Push alerts are not available on this device.")
                         : push === "denied"
-                          ? t("This browser blocked alerts. Allow them in the site settings.")
+                          ? t("Alerts are blocked. Allow them in the site settings.")
                           : push === "on"
-                            ? t("On for this browser. Alerts appear when money moves.")
-                            : t("Off. Turn on to alert this browser.")}
+                            ? t("On. Alerts appear when money moves.")
+                            : t("Off. Turn on to receive alerts when money moves.")}
                     </span>
                   </div>
                   <button
@@ -348,14 +344,16 @@ function SettingsForm({ user }: { user: BankUser }) {
                     disabled={push === "unsupported"}
                     onClick={async () => {
                       if (push === "on") {
+                        await releaseFirebasePush(user.id);
                         disablePush();
                         setPush("off");
                         return;
                       }
                       const next = await enablePush();
+                      if (next === "on") await bindFirebasePush(user.id).catch(() => undefined);
                       setPush(next);
                       if (next === "on") {
-                        await showPush(t("Push is on"), t("This browser will alert you when money moves."), "push-on");
+                        await showPush(t("Push is on"), t("Alerts appear when money moves."), "push-on");
                       }
                     }}
                   >
@@ -379,7 +377,7 @@ function SettingsForm({ user }: { user: BankUser }) {
                 <li>
                   <div>
                     <strong>{t("Security")}</strong>
-                    <span className="muted">{t("PIN changes and new sign-ins on this browser.")}</span>
+                    <span className="muted">{t("PIN changes and new sign-ins.")}</span>
                   </div>
                   <button
                     type="button"
@@ -444,7 +442,6 @@ function SettingsForm({ user }: { user: BankUser }) {
                   </button>
                 </li>
               </ul>
-              <p className="muted">{t("The session and these preferences stay in this browser. The transfer PIN is not included in a download.")}</p>
               <button type="button" className="btn" onClick={downloadProfile}>
                 {t("Download profile")}
               </button>

@@ -49,6 +49,7 @@ export function TwoFactorPanel() {
     enableTotp(user!.id, secret, next);
     if (alertsOf(user!).security) {
       addNote({
+        userId: user!.id,
         title: "Authenticator on",
         body: "Sign-in now asks for a code from an authenticator app.",
       });
@@ -72,6 +73,7 @@ export function TwoFactorPanel() {
     disableTotp(user.id);
     if (alertsOf(user).security) {
       addNote({
+        userId: user.id,
         title: "Authenticator off",
         body: "Sign-in no longer asks for an authenticator code.",
       });
@@ -112,7 +114,7 @@ export function TwoFactorPanel() {
           <h3>{t("Recovery codes")}</h3>
           <p className="muted">
             {t(
-              "Each code works once if you cannot open the app. They stay in this browser.",
+              "Each code works once if you cannot open the app.",
             )}
           </p>
           <ul className="recovery-grid">
@@ -145,7 +147,7 @@ export function TwoFactorPanel() {
           </p>
           <p className="muted">
             {t(
-              "The key stays in this browser. Codes are checked here, not by a bank.",
+              "Codes from this key are checked at sign-in.",
             )}
           </p>
           <p className="kicker">{t("Setup key")}</p>

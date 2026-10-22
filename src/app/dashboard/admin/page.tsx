@@ -7,7 +7,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
-import { MONEY, adjustBalance, money, patchUser, removeMember, type BankUser, type MoneyCode } from "@/lib/bank";
+import { MONEY, adjustBalance, money, removeMember, setAccountRole, setAccountStatus, setCreateAccess, type BankUser, type MoneyCode } from "@/lib/bank";
 
 function initials(name: string) {
   const letters = name
@@ -113,6 +113,7 @@ export default function AdminPage() {
   const [ask, setAsk] = useState<
     | { type: "status"; id: string; name: string; next: "active" | "inactive" }
     | { type: "access"; id: string; name: string; canCreate: boolean }
+    | { type: "role"; id: string; name: string; next: "admin" | "member" }
     | { type: "remove"; id: string; name: string }
     | null
   >(null);
@@ -149,6 +150,7 @@ export default function AdminPage() {
   }
 
   function saveBalance(subject: BankUser) {
+    if (!user) return;
     const value = Number(amount);
     if (!Number.isFinite(value) || value <= 0) {
       setError(t("Enter an amount."));
@@ -162,7 +164,11 @@ export default function AdminPage() {
     const digits = code === "JPY" ? 0 : 2;
     const factor = 10 ** digits;
     const next = Math.round((mode === "add" ? current + value : current - value) * factor) / factor;
-    adjustBalance(subject.id, code, next);
+    const failed = adjustBalance(user.id, subject.id, code, next);
+    if (failed) {
+      setError(t(failed));
+      return;
+    }
     setEditing(null);
     setError("");
     toast(t("Balance updated."));
@@ -180,7 +186,7 @@ export default function AdminPage() {
           </span>
           <div>
             <h1>{t("Admin panel")}</h1>
-            <p>{t("Accounts, balances, and permissions stored in this browser.")}</p>
+            <p>{t("Accounts, balances, and permissions on this desk.")}</p>
           </div>
           <Link className="btn btn-primary admin-create" href="/dashboard/create">
             + {t("Create account")}
@@ -272,7 +278,9 @@ export default function AdminPage() {
                         <span className={item.status === "active" ? "admin-pill is-on" : "admin-pill is-off"}>
                           {item.status === "active" ? t("Active") : t("Inactive")}
                         </span>
-                        {item.role === "admin" ? <span className="admin-pill is-role">{t("Admin")}</span> : null}
+                        <span className={item.role === "admin" ? "admin-pill is-role" : "admin-pill"}>
+                          {item.role === "admin" ? t("Admin") : t("Member")}
+                        </span>
                       </div>
                     </td>
                     <td>
@@ -322,6 +330,22 @@ export default function AdminPage() {
                         >
                           <Mark name="allow" />
                         </button>
+                        {item.id !== user.id ? (
+                          <button
+                            type="button"
+                            className="text-button admin-role"
+                            onClick={() =>
+                              setAsk({
+                                type: "role",
+                                id: item.id,
+                                name: item.name,
+                                next: item.role === "admin" ? "member" : "admin",
+                              })
+                            }
+                          >
+                            {item.role === "admin" ? t("Make member") : t("Make admin")}
+                          </button>
+                        ) : null}
                         {item.id !== user.id && item.role === "member" ? (
                           <button
                             type="button"
@@ -368,7 +392,11 @@ export default function AdminPage() {
               ? ask.canCreate
                 ? t("Allow create access?")
                 : t("Remove create access?")
-              : t("Remove this colleague?")
+              : ask?.type === "role"
+                ? ask.next === "admin"
+                  ? t("Make this account an admin?")
+                  : t("Make this account a member?")
+                : t("Remove this colleague?")
         }
         body={
           ask?.type === "status"
@@ -379,7 +407,11 @@ export default function AdminPage() {
               ? ask.canCreate
                 ? t("{name} will be able to open accounts.", { name: ask.name })
                 : t("{name} will not be able to open accounts.", { name: ask.name })
-              : t("{name} and their balance leave this browser.", { name: ask?.name ?? "" })
+              : ask?.type === "role"
+                ? ask.next === "admin"
+                  ? t("{name} will manage users, balances, and permissions.", { name: ask.name })
+                  : t("{name} will use their own account. Admin tools will close.", { name: ask.name })
+                : t("{name} and their balance leave this desk.", { name: ask?.name ?? "" })
         }
         confirmLabel={
           ask?.type === "status"
@@ -390,18 +422,23 @@ export default function AdminPage() {
               ? ask.canCreate
                 ? t("Allow create")
                 : t("Remove create")
-              : t("Remove")
+              : ask?.type === "role"
+                ? ask.next === "admin"
+                  ? t("Make admin")
+                  : t("Make member")
+                : t("Remove")
         }
         onClose={() => setAsk(null)}
         onConfirm={() => {
           if (!ask) return;
-          if (ask.type === "status") patchUser(ask.id, { status: ask.next });
-          else if (ask.type === "access") patchUser(ask.id, { canCreate: ask.canCreate });
-          else {
-            const failed = removeMember(user.id, ask.id);
-            if (failed) toast(t(failed));
-            else toast(t("Member removed."));
-          }
+          let failed: string | null = null;
+          if (ask.type === "status") failed = setAccountStatus(user.id, ask.id, ask.next);
+          else if (ask.type === "access") failed = setCreateAccess(user.id, ask.id, ask.canCreate);
+          else if (ask.type === "role") failed = setAccountRole(user.id, ask.id, ask.next);
+          else failed = removeMember(user.id, ask.id);
+          if (failed) toast(t(failed));
+          else if (ask.type === "remove") toast(t("Member removed."));
+          else if (ask.type === "role") toast(ask.next === "admin" ? t("Admin access saved.") : t("Member access saved."));
           setAsk(null);
         }}
       />

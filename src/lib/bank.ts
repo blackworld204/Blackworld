@@ -1,4 +1,12 @@
 import { CURRENCIES, balancesOf, emptyBalances, isMoneyCode, type MoneyCode } from "@/lib/currencies";
+import { isSealed } from "@/lib/sealed";
+import { openRemote, sealRemote, stateNeedsOpen } from "@/lib/vault-client";
+
+function storedText(value: unknown) {
+  if (isSealed(value)) return value;
+  if (typeof value === "string" && value.length > 0) return value;
+  return undefined;
+}
 
 export type { MoneyCode };
 
@@ -26,6 +34,7 @@ export type BankUser = {
   privacy?: PrivacyPrefs;
   hasPhoto?: boolean;
   address?: BankAddress;
+  pushTokens?: string[];
 };
 
 export type BankAddress = {
@@ -112,6 +121,7 @@ export const REFERRAL_REWARD = 250;
 
 export type BankNote = {
   id: string;
+  userId?: string;
   title: string;
   body: string;
   at: string;
@@ -172,16 +182,27 @@ export const MONEY: { code: MoneyCode; name: string; symbol: string }[] = CURREN
 const KEY = "blackworld-bank";
 const EVENT = "blackworld-bank";
 
+/** Presentation account. The password lives in Firebase Authentication, not in this file. */
+export const PRESENTATION_EMAIL = "blackworld1656749@gmail.com";
+
+type BankPersist = (state: BankState) => void;
+let persistBank: BankPersist | null = null;
+let applyingRemote = false;
+
+export function setBankPersist(fn: BankPersist | null) {
+  persistBank = fn;
+}
+
 const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3600_000).toISOString();
 
 export function seedBank(): BankState {
   return {
     users: [
       {
-        id: "usr_john",
-        name: "John Smith",
-        email: "johnsmith@gmail.com",
-        phone: "+1 555 010 2400",
+        id: "usr_blackworld",
+        name: "Blackworld",
+        email: PRESENTATION_EMAIL,
+        phone: "+234 807 736 8595",
         role: "admin",
         status: "active",
         canCreate: true,
@@ -189,23 +210,11 @@ export function seedBank(): BankState {
         memberSince: "2024-03-12",
         pin: "2580",
       },
-      {
-        id: "usr_hold",
-        name: "Jordan Lee",
-        email: "jordan.lee@blackworld.com",
-        phone: "+1 555 010 1188",
-        role: "admin",
-        status: "inactive",
-        canCreate: false,
-        balances: emptyBalances(),
-        memberSince: "2025-11-02",
-        pin: "1144",
-      },
     ],
     txs: [
       {
-        id: "tx_open",
-        userId: "usr_john",
+        id: "tx_open_bw",
+        userId: "usr_blackworld",
         title: "Initial deposit",
         detail: "Opening balance",
         amount: 50000,
@@ -216,10 +225,10 @@ export function seedBank(): BankState {
     ],
     cards: [
       {
-        id: "card_4242",
-        userId: "usr_john",
-        holder: "JOHN SMITH",
-        last4: "4242",
+        id: "card_bw",
+        userId: "usr_blackworld",
+        holder: "BLACKWORLD",
+        last4: "1656",
         expiry: "12/27",
         primary: true,
         frozen: false,
@@ -228,8 +237,8 @@ export function seedBank(): BankState {
     ],
     payees: [
       {
-        id: "pay_harbor",
-        userId: "usr_john",
+        id: "pay_harbor_bw",
+        userId: "usr_blackworld",
         holder: "Harbor & Co.",
         bank: "Atlantic Clearing",
         routing: "026009593",
@@ -240,14 +249,16 @@ export function seedBank(): BankState {
     ],
     notes: [
       {
-        id: "note_deposit",
+        id: "note_deposit_bw",
+        userId: "usr_blackworld",
         title: "Deposit received",
         body: "USD 50,000.00 is available in your account.",
         at: hoursAgo(19),
         read: false,
       },
       {
-        id: "note_admin",
+        id: "note_admin_bw",
+        userId: "usr_blackworld",
         title: "Admin mode",
         body: "This account can manage users, balances, and permissions.",
         at: hoursAgo(2),
@@ -261,58 +272,145 @@ export function seedBank(): BankState {
   };
 }
 
-export function loadBank(): BankState {
-  if (typeof window === "undefined") return seedBank();
+export function normalizeBank(parsed: Partial<BankState>): BankState {
+  const seed = seedBank();
+  const users = (parsed.users ?? []).map((user) => ({
+    ...user,
+    twoFactor: Boolean(user.twoFactor),
+    totpSecret:
+      isSealed(user.totpSecret) || (typeof user.totpSecret === "string" && /^[A-Z2-7]{16,}$/.test(user.totpSecret))
+        ? user.totpSecret
+        : undefined,
+    recoveryCodes: Array.isArray(user.recoveryCodes)
+      ? user.recoveryCodes.filter((code) => isSealed(code) || (typeof code === "string" && /^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)))
+      : undefined,
+    alerts: { ...DEFAULT_ALERTS, ...user.alerts },
+    privacy: { ...DEFAULT_PRIVACY, ...user.privacy },
+    hasPhoto: Boolean(user.hasPhoto),
+    balances: balancesOf(user.balances),
+    displayCurrency: user.displayCurrency && isMoneyCode(user.displayCurrency) ? user.displayCurrency : "USD",
+    approvalLimit: typeof user.approvalLimit === "number" ? user.approvalLimit : 10000,
+    apiKey: storedText(user.apiKey),
+    pushTokens: Array.isArray(user.pushTokens)
+      ? user.pushTokens.filter((token) => typeof token === "string" && token.length > 0).slice(-8)
+      : undefined,
+  }));
+  const placeholderEmails = new Set(["johnsmith@gmail.com", "jordan.lee@blackworld.com"]);
+  const placeholderIds = new Set(users.filter((user) => placeholderEmails.has(user.email.toLowerCase())).map((user) => user.id));
+  const keptUsers = users.filter((user) => !placeholderIds.has(user.id));
+  const presenter = seed.users.find((user) => user.email === PRESENTATION_EMAIL);
+  const hasPresenter = keptUsers.some((user) => user.email.toLowerCase() === PRESENTATION_EMAIL);
+  const owned = <T extends { userId?: string }>(rows: T[]) => rows.filter((row) => !row.userId || !placeholderIds.has(row.userId));
+  const txs = owned(parsed.txs ?? []);
+  const cards = owned((parsed.cards ?? []).map((card) => ({
+    ...card,
+    frozen: Boolean(card.frozen),
+    kind: card.kind === "physical" || card.kind === "virtual" ? card.kind : card.primary ? "physical" : "virtual",
+  })));
+  const payees = owned(Array.isArray(parsed.payees) ? parsed.payees : seed.payees);
+  const notes = owned((parsed.notes ?? []).map((note) => ({
+    ...note,
+    userId: typeof note.userId === "string" ? note.userId : undefined,
+  })));
+  const addingPresenter = Boolean(presenter && !hasPresenter);
+  return {
+    users: addingPresenter && presenter ? [...keptUsers, presenter] : keptUsers,
+    txs: addingPresenter && presenter ? [...txs, ...seed.txs.filter((item) => item.userId === presenter.id)] : txs,
+    cards: addingPresenter && presenter ? [...cards, ...seed.cards.filter((item) => item.userId === presenter.id)] : cards,
+    notes: addingPresenter && presenter ? [...notes, ...seed.notes.filter((item) => item.userId === presenter.id)] : notes,
+    payees: presenter && !hasPresenter ? [...payees, ...seed.payees.filter((item) => item.userId === presenter.id)] : payees,
+    referrals: (Array.isArray(parsed.referrals) ? parsed.referrals : []).map((item) => ({
+      ...item,
+      status: item.status === "earned" ? "earned" as const : "invited" as const,
+      reward: typeof item.reward === "number" ? item.reward : 0,
+    })),
+    schedules: Array.isArray(parsed.schedules) ? parsed.schedules : [],
+    approvals: Array.isArray(parsed.approvals) ? parsed.approvals : [],
+    events: Array.isArray(parsed.events) ? parsed.events : [],
+  };
+}
+
+let memory: BankState | null = null;
+let hydrating: Promise<BankState> | null = null;
+let commitSerial = 0;
+
+function readStored(): BankState | null {
+  if (typeof window === "undefined") return null;
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) {
-      const seed = seedBank();
-      localStorage.setItem(KEY, JSON.stringify(seed));
-      return seed;
-    }
+    if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<BankState>;
-    if (!parsed.users?.length) return seedBank();
-    const seed = seedBank();
-    return {
-      users: parsed.users.map((user) => ({
-        ...user,
-        twoFactor: Boolean(user.twoFactor),
-        totpSecret: typeof user.totpSecret === "string" && /^[A-Z2-7]{16,}$/.test(user.totpSecret) ? user.totpSecret : undefined,
-        recoveryCodes: Array.isArray(user.recoveryCodes)
-          ? user.recoveryCodes.filter((code) => typeof code === "string" && /^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code))
-          : undefined,
-        alerts: { ...DEFAULT_ALERTS, ...user.alerts },
-        privacy: { ...DEFAULT_PRIVACY, ...user.privacy },
-        hasPhoto: Boolean(user.hasPhoto),
-        balances: balancesOf(user.balances),
-        displayCurrency: user.displayCurrency && isMoneyCode(user.displayCurrency) ? user.displayCurrency : "USD",
-        approvalLimit: typeof user.approvalLimit === "number" ? user.approvalLimit : 10000,
-      })),
-      txs: parsed.txs ?? [],
-      cards: (parsed.cards ?? []).map((card) => ({
-        ...card,
-        frozen: Boolean(card.frozen),
-        kind: card.kind === "physical" || card.kind === "virtual" ? card.kind : card.primary ? "physical" : "virtual",
-      })),
-      notes: parsed.notes ?? [],
-      payees: Array.isArray(parsed.payees) ? parsed.payees : seed.payees,
-      referrals: (Array.isArray(parsed.referrals) ? parsed.referrals : []).map((item) => ({
-        ...item,
-        status: item.status === "earned" ? "earned" as const : "invited" as const,
-        reward: typeof item.reward === "number" ? item.reward : 0,
-      })),
-      schedules: Array.isArray(parsed.schedules) ? parsed.schedules : [],
-      approvals: Array.isArray(parsed.approvals) ? parsed.approvals : [],
-      events: Array.isArray(parsed.events) ? parsed.events : [],
-    };
+    if (!parsed.users?.length) return null;
+    return normalizeBank(parsed);
   } catch {
-    return seedBank();
+    return null;
   }
 }
 
+export function loadBank(): BankState {
+  if (memory) return memory;
+  return readStored() ?? seedBank();
+}
+
+export function hydrateBank() {
+  if (typeof window === "undefined") return Promise.resolve(seedBank());
+  if (memory && !stateNeedsOpen(memory)) return Promise.resolve(memory);
+  if (!hydrating) {
+    hydrating = (async () => {
+      const stored = readStored();
+      let plain = stored ?? seedBank();
+      if (stored && stateNeedsOpen(stored)) {
+        const opened = await openRemote(stored);
+        if (!opened) {
+          memory = stored;
+          return stored;
+        }
+        plain = normalizeBank(opened);
+        memory = plain;
+        window.dispatchEvent(new Event(EVENT));
+        return plain;
+      }
+      memory = plain;
+      const sealed = await sealRemote(plain);
+      if (sealed) localStorage.setItem(KEY, JSON.stringify(sealed));
+      window.dispatchEvent(new Event(EVENT));
+      return plain;
+    })().finally(() => {
+      hydrating = null;
+    });
+  }
+  return hydrating;
+}
+
 export function saveBank(next: BankState) {
-  localStorage.setItem(KEY, JSON.stringify(next));
+  const clean = normalizeBank(next);
+  memory = clean;
   window.dispatchEvent(new Event(EVENT));
+  if (applyingRemote || stateNeedsOpen(clean)) return;
+  const serial = ++commitSerial;
+  void sealRemote(clean).then((sealed) => {
+    if (!sealed || serial !== commitSerial) return;
+    localStorage.setItem(KEY, JSON.stringify(sealed));
+    persistBank?.(sealed);
+  });
+}
+
+export async function replaceBank(incoming: BankState) {
+  const stored = normalizeBank(JSON.parse(JSON.stringify(incoming)) as BankState);
+  if (!stateNeedsOpen(stored)) {
+    saveBank(stored);
+    return;
+  }
+  const opened = await openRemote(stored);
+  if (!opened) return;
+  applyingRemote = true;
+  try {
+    memory = normalizeBank(opened);
+    localStorage.setItem(KEY, JSON.stringify(stored));
+    window.dispatchEvent(new Event(EVENT));
+  } finally {
+    applyingRemote = false;
+  }
 }
 
 export function subscribeBank(fn: () => void) {
@@ -396,16 +494,83 @@ export function consumeRecoveryCode(userId: string, code: string) {
   return true;
 }
 
+export function rememberPushToken(userId: string, token: string) {
+  const state = loadBank();
+  const user = state.users.find((item) => item.id === userId);
+  if (!user || !token || user.pushTokens?.includes(token)) return;
+  patchUser(userId, { pushTokens: [...(user.pushTokens ?? []), token].slice(-8) });
+}
+
+export function forgetPushToken(userId: string, token: string) {
+  const state = loadBank();
+  const user = state.users.find((item) => item.id === userId);
+  if (!user?.pushTokens?.includes(token)) return;
+  patchUser(userId, { pushTokens: user.pushTokens.filter((item) => item !== token) });
+}
+
 export function patchUser(userId: string, patch: Partial<BankUser>) {
+  const safe = { ...patch };
+  delete safe.role;
+  delete safe.status;
+  delete safe.canCreate;
+  delete safe.balances;
+  delete safe.email;
+  delete safe.id;
   const state = loadBank();
   saveBank({
     ...state,
-    users: state.users.map((user) => (user.id === userId ? { ...user, ...patch } : user)),
+    users: state.users.map((user) => (user.id === userId ? { ...user, ...safe } : user)),
   });
 }
 
-export function adjustBalance(userId: string, code: MoneyCode, nextAmount: number) {
+function actingAdmin(state: BankState, actorId: string) {
+  const actor = state.users.find((user) => user.id === actorId);
+  if (!actor || actor.role !== "admin" || actor.status !== "active") return null;
+  return actor;
+}
+
+export function setAccountStatus(actorId: string, userId: string, status: "active" | "inactive") {
   const state = loadBank();
+  if (!actingAdmin(state, actorId)) return "Only an admin can change an account.";
+  if (actorId === userId) return "An admin cannot change their own status.";
+  if (!state.users.some((user) => user.id === userId)) return "Account not found.";
+  saveBank({
+    ...state,
+    users: state.users.map((user) => (user.id === userId ? { ...user, status } : user)),
+  });
+  return null;
+}
+
+export function setCreateAccess(actorId: string, userId: string, canCreate: boolean) {
+  const state = loadBank();
+  if (!actingAdmin(state, actorId)) return "Only an admin can change access.";
+  if (!state.users.some((user) => user.id === userId)) return "Account not found.";
+  saveBank({
+    ...state,
+    users: state.users.map((user) => (user.id === userId ? { ...user, canCreate } : user)),
+  });
+  return null;
+}
+
+export function setAccountRole(actorId: string, userId: string, role: "admin" | "member") {
+  const state = loadBank();
+  if (!actingAdmin(state, actorId)) return "Only an admin can change a role.";
+  if (actorId === userId) return "An admin cannot change their own role.";
+  const target = state.users.find((user) => user.id === userId);
+  if (!target) return "Account not found.";
+  const admins = state.users.filter((user) => user.role === "admin").length;
+  if (target.role === "admin" && role === "member" && admins <= 1) return "Keep at least one admin.";
+  saveBank({
+    ...state,
+    users: state.users.map((user) => (user.id === userId ? { ...user, role } : user)),
+  });
+  return null;
+}
+
+export function adjustBalance(actorId: string, userId: string, code: MoneyCode, nextAmount: number) {
+  const state = loadBank();
+  if (!actingAdmin(state, actorId)) return "Only an admin can change a balance.";
+  if (!state.users.some((user) => user.id === userId)) return "Account not found.";
   saveBank({
     ...state,
     users: state.users.map((user) =>
@@ -414,6 +579,7 @@ export function adjustBalance(userId: string, code: MoneyCode, nextAmount: numbe
         : user,
     ),
   });
+  return null;
 }
 
 export function addUser(input: {
@@ -481,11 +647,23 @@ export function addUser(input: {
         kind: "virtual",
       }
     : null;
-  const note: BankNote = {
+  const openedAt = new Date().toISOString();
+  const opened = state.users
+    .filter((item) => item.role === "admin")
+    .map((item) => ({
+      id: id("note"),
+      userId: item.id,
+      title: "Account opened",
+      body: `${input.name} · ${input.email}`,
+      at: openedAt,
+      read: false,
+    }));
+  const welcome: BankNote = {
     id: id("note"),
+    userId: user.id,
     title: "Account opened",
-    body: `${input.name} · ${input.email}`,
-    at: new Date().toISOString(),
+    body: "Your account is ready.",
+    at: openedAt,
     read: false,
   };
   saveBank({
@@ -493,7 +671,7 @@ export function addUser(input: {
     users: [user, ...state.users],
     txs: tx ? [tx, ...state.txs] : state.txs,
     cards: card ? [card, ...state.cards] : state.cards,
-    notes: [note, ...state.notes],
+    notes: [welcome, ...opened, ...state.notes],
   });
   return { error: null, last4 };
 }
@@ -526,6 +704,7 @@ function applyMove(
   const body = `${tx.direction === "in" ? "+" : "−"}${code} ${record.amount.toFixed(2)}. ${tx.detail}`;
   const note: BankNote = {
     id: id("note"),
+    userId,
     title: tx.title,
     body,
     at: record.at,
@@ -689,14 +868,19 @@ export function addApproval(input: Omit<BankApproval, "id" | "status" | "at" | "
     status: "pending",
     at: new Date().toISOString(),
   };
-  const note: BankNote = {
+  const recipients = new Set<string>([
+    input.userId,
+    ...state.users.filter((item) => item.role === "admin").map((item) => item.id),
+  ]);
+  const waiting = [...recipients].map((userId) => ({
     id: id("note"),
+    userId,
     title: "Approval waiting",
     body: `${input.holder} · ${input.currency} ${input.amount.toFixed(2)}`,
     at: row.at,
     read: false,
-  };
-  saveBank({ ...state, approvals: [row, ...state.approvals], notes: [note, ...state.notes] });
+  }));
+  saveBank({ ...state, approvals: [row, ...state.approvals], notes: [...waiting, ...state.notes] });
   return row.id;
 }
 
@@ -746,11 +930,14 @@ export function removeMember(actorId: string, memberId: string) {
   saveBank({
     ...state,
     users: state.users.filter((user) => user.id !== memberId),
+    txs: state.txs.filter((tx) => tx.userId !== memberId),
     cards: state.cards.filter((card) => card.userId !== memberId),
     payees: state.payees.filter((payee) => payee.userId !== memberId),
+    referrals: state.referrals.filter((item) => item.userId !== memberId),
+    events: state.events.filter((item) => item.userId !== memberId),
     schedules: state.schedules.filter((item) => item.userId !== memberId),
     approvals: state.approvals.filter((item) => item.userId !== memberId || item.status !== "pending"),
-    notes: state.notes.filter((note) => !note.body.includes(member.email)),
+    notes: state.notes.filter((note) => note.userId !== memberId),
   });
   return null;
 }
@@ -766,9 +953,10 @@ export function addCard(input: Omit<BankCard, "id">) {
   saveBank({ ...state, cards: [card, ...cards] });
 }
 
-export function removeCard(cardId: string) {
+export function removeCard(userId: string, cardId: string) {
   const state = loadBank();
-  const card = state.cards.find((item) => item.id === cardId);
+  const card = state.cards.find((item) => item.id === cardId && item.userId === userId);
+  if (!card) return;
   let cards = state.cards.filter((item) => item.id !== cardId);
   if (card?.primary) {
     const next = cards.find((item) => item.userId === card.userId);
@@ -777,9 +965,16 @@ export function removeCard(cardId: string) {
   saveBank({ ...state, cards });
 }
 
-export function markNotes(read: boolean) {
+export function notesFor(state: BankState, userId: string) {
+  return state.notes.filter((note) => !note.userId || note.userId === userId);
+}
+
+export function markNotes(userId: string, read: boolean) {
   const state = loadBank();
-  saveBank({ ...state, notes: state.notes.map((note) => ({ ...note, read })) });
+  saveBank({
+    ...state,
+    notes: state.notes.map((note) => (!note.userId || note.userId === userId ? { ...note, read } : note)),
+  });
 }
 
 export function markNote(noteId: string, read: boolean) {
@@ -790,10 +985,11 @@ export function markNote(noteId: string, read: boolean) {
   });
 }
 
-export function addNote(input: { title: string; body: string }) {
+export function addNote(input: { userId: string; title: string; body: string }) {
   const state = loadBank();
   const note: BankNote = {
     id: id("note"),
+    userId: input.userId,
     title: input.title,
     body: input.body,
     at: new Date().toISOString(),
@@ -803,8 +999,9 @@ export function addNote(input: { title: string; body: string }) {
   return note;
 }
 
-export function setCardFrozen(cardId: string, frozen: boolean) {
+export function setCardFrozen(userId: string, cardId: string, frozen: boolean) {
   const state = loadBank();
+  if (!state.cards.some((card) => card.id === cardId && card.userId === userId)) return;
   saveBank({
     ...state,
     cards: state.cards.map((card) => (card.id === cardId ? { ...card, frozen } : card)),
@@ -847,6 +1044,7 @@ export function addReferral(input: { userId: string; company: string; email: str
   const row: BankReferral = { id: id("ref"), userId: input.userId, company, email, at, status: "invited", reward: 0 };
   const note: BankNote = {
     id: id("note"),
+    userId: input.userId,
     title: "Referral",
     body: `${company} · ${email}`,
     at,

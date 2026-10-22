@@ -2,11 +2,9 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { CurrencyFlag } from "@/components/currency-flag";
-import engineCodes from "@/i18n/engine-codes.json";
-import { fallbackLocale } from "@/i18n/fallbacks";
 import { foldLanguage, LOCALES, localeById, type Locale, type LocaleId } from "@/i18n/locales";
-import { catalog } from "@/i18n/messages";
 import { useI18n } from "@/i18n/provider";
+import { rendersTranslation } from "@/i18n/written";
 
 const ROW = 44;
 
@@ -54,7 +52,7 @@ function LanguageOptions({
             <button type="button" role="option" aria-selected={item.id === locale} onClick={() => onPick(item.id)}>
               <CurrencyFlag code={item.id} />
               <span>{item.native}</span>
-              {item.id === "en" || catalog[item.id] || item.id in engineCodes || item.id in fallbackLocale ? null : (
+              {rendersTranslation(item.id) ? null : (
                 <small className="lang-note">{englishNote}</small>
               )}
             </button>
@@ -85,8 +83,9 @@ export function LanguageSelect({ variant = "menu" }: { variant?: "menu" | "list"
       const rect = root.current?.getBoundingClientRect();
       if (!rect) return;
       const top = rect.bottom + 4;
-      const width = Math.min(280, window.innerWidth - 16);
-      const left = Math.min(Math.max(8, rect.right - width), window.innerWidth - width - 8);
+      const view = document.documentElement.clientWidth;
+      const width = Math.min(280, view - 16);
+      const left = Math.min(Math.max(8, rect.right - width), view - width - 8);
       setBox({
         top,
         end: left,
@@ -176,7 +175,7 @@ export function LanguageSelect({ variant = "menu" }: { variant?: "menu" | "list"
       {open ? (
         <div
           className="lang-menu"
-          style={{ top: box.top, left: box.end, width: "min(280px, calc(100vw - 16px))", maxHeight: box.maxHeight }}
+          style={{ top: box.top, left: box.end, width: "min(280px, calc(100% - 16px))", maxHeight: box.maxHeight }}
         >
           {search}
           <LanguageOptions

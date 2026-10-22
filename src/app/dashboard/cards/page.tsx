@@ -50,7 +50,7 @@ export default function CardsPage() {
       <header className="app-intro">
         <p className="kicker">{t("Cards")}</p>
         <h1>{t("Linked cards")}</h1>
-        <p className="lede">{t("Reveal the expiry when you need it. Freeze a card to stop card deposits. Cards stay in this browser.")}</p>
+        <p className="lede">{t("Cards on this account.")}</p>
       </header>
       {cards.length === 0 ? <p className="muted">{t("No cards yet.")}</p> : null}
       <div className="card-grid">
@@ -142,7 +142,7 @@ export default function CardsPage() {
         }
         body={
           ask?.remove
-            ? t("The card ending {last4} leaves this browser.", { last4: ask.last4 })
+            ? t("The card ending {last4} leaves this account.", { last4: ask.last4 })
             : ask?.frozen
               ? t("Card deposits can use the card ending {last4} again.", { last4: ask.last4 })
               : t("Card deposits stop until you unfreeze the card ending {last4}.", { last4: ask?.last4 ?? "" })
@@ -152,10 +152,10 @@ export default function CardsPage() {
         onConfirm={() => {
           if (!ask) return;
           if (ask.remove) {
-            removeCard(ask.id);
+            removeCard(user.id, ask.id);
             toast(t("Card removed."));
           } else {
-            setCardFrozen(ask.id, !ask.frozen);
+            setCardFrozen(user.id, ask.id, !ask.frozen);
             toast(ask.frozen ? t("Card unfrozen.") : t("Card frozen."));
           }
           setAsk(null);

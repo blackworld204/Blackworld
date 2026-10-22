@@ -7,6 +7,7 @@ import { ConnectionMark } from "@/components/connection-mark";
 import { LanguageSelect } from "@/components/language-select";
 import { Mark } from "@/components/mark";
 import { useSession } from "@/components/session";
+import { SignOutButton } from "@/components/sign-out-button";
 import { useI18n } from "@/i18n/provider";
 
 const links = [
@@ -19,7 +20,7 @@ const links = [
 
 export function Header() {
   const pathname = usePathname();
-  const { session, ready, signOut } = useSession();
+  const { session, ready } = useSession();
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
 
@@ -30,7 +31,7 @@ export function Header() {
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape" && !document.querySelector(".confirm-layer")) setOpen(false);
     };
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKey);
@@ -76,9 +77,7 @@ export function Header() {
               <Link href="/dashboard" className="text-button desk-link">
                 {t("Dashboard")}
               </Link>
-              <button type="button" className="text-button session-signout" onClick={signOut}>
-                {t("Sign out")}
-              </button>
+              <SignOutButton className="text-button session-signout" />
             </>
           ) : ready ? (
             <Link href="/login" className="text-button login-link">
@@ -111,16 +110,13 @@ export function Header() {
                 {t(link.label)}
               </Link>
             ))}
-            <Link href="/demo" onClick={() => setOpen(false)}>{t("Watch demo")}</Link>
             {session ? (
               <Link href="/dashboard" onClick={() => setOpen(false)}>
                 {t("Dashboard")}
               </Link>
             ) : null}
             {session ? (
-              <button type="button" className="menu-signout" onClick={signOut}>
-                {t("Sign out")}
-              </button>
+              <SignOutButton className="menu-signout" onDone={() => setOpen(false)} />
             ) : (
               <Link href="/login" onClick={() => setOpen(false)}>{t("Login")}</Link>
             )}

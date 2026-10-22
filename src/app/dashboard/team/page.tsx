@@ -1,11 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { BusyButton } from "@/components/busy-button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
+import { authErrorMessage } from "@/components/session";
 import { inviteMember, removeMember } from "@/lib/bank";
+import { createPresentationUser } from "@/lib/firebase";
 
 export default function TeamPage() {
   const { state, user } = useAccount();
@@ -13,27 +16,54 @@ export default function TeamPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [pin, setPin] = useState("");
   const [drop, setDrop] = useState<{ id: string; name: string } | null>(null);
 
   if (!state || !user) return <div className="app-hold" />;
+  if (user.role !== "admin") {
+    return (
+      <div className="app-pad">
+        <header className="app-intro">
+          <p className="kicker">{t("Team")}</p>
+          <h1>{t("Administrators only")}</h1>
+          <p className="lede">{t("Colleagues on this account.")}</p>
+        </header>
+      </div>
+    );
+  }
 
   function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (busy) return;
     if (user?.role !== "admin") return setError(t("Only an admin can invite."));
     if (name.trim().length < 2) return setError(t("Enter a name."));
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return setError(t("Enter a work email."));
+    if (password.length < 8) return setError(t("Password must be at least 8 characters."));
     if (phone.trim().length < 6) return setError(t("Enter a phone number."));
     const nextPin = String(Math.floor(1000 + Math.random() * 9000));
-    const result = inviteMember({ name: name.trim(), email: email.trim(), phone: phone.trim(), pin: nextPin });
-    if (result.error) return setError(t(result.error));
-    setName("");
-    setEmail("");
-    setPhone("");
-    setError("");
-    setPin(nextPin);
-    toast(t("Invitation ready."));
+    setBusy(true);
+    void createPresentationUser(email.trim(), password)
+      .then(() => {
+        const result = inviteMember({ name: name.trim(), email: email.trim(), phone: phone.trim(), pin: nextPin });
+        if (result.error) {
+          setError(t(result.error));
+          return;
+        }
+        setName("");
+        setEmail("");
+        setPhone("");
+        setPassword("");
+        setError("");
+        setPin(nextPin);
+        toast(t("Invitation ready."));
+      })
+      .catch((reason: unknown) => {
+        setError(t(authErrorMessage(reason)));
+      })
+      .finally(() => setBusy(false));
   }
 
   return (
@@ -41,16 +71,21 @@ export default function TeamPage() {
       <header className="app-intro">
         <p className="kicker">{t("Team")}</p>
         <h1>{t("Colleagues")}</h1>
-        <p className="lede">{t("A colleague gets a separate balance, starting at zero. Share the PIN once. Sign-in still checks password length in this browser.")}</p>
+        <p className="lede">{t("Each colleague has a separate account.")}</p>
       </header>
       <ul className="tx-list">
         {state.users.map((member) => (
           <li key={member.id}>
             <div>
               <strong>{member.name}</strong>
-              <span className="muted">
-                {member.email} · {member.role === "admin" ? t("Admin") : t("Member")} ·{" "}
-                {member.status === "active" ? t("Active") : t("Inactive")}
+              <span className="muted team-meta">
+                <span>{member.email}</span>
+                <span className={member.role === "admin" ? "admin-pill is-role" : "admin-pill"}>
+                  {member.role === "admin" ? t("Admin") : t("Member")}
+                </span>
+                <span className={member.status === "active" ? "admin-pill is-on" : "admin-pill is-off"}>
+                  {member.status === "active" ? t("Active") : t("Inactive")}
+                </span>
               </span>
             </div>
             {user.role === "admin" && member.role === "member" ? (
@@ -78,13 +113,17 @@ export default function TeamPage() {
             <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
           </label>
           <label className="field">
+            <span>{t("Password")}</span>
+            <input type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} />
+          </label>
+          <label className="field">
             <span>{t("Phone number")}</span>
             <input value={phone} onChange={(event) => setPhone(event.target.value)} />
           </label>
           {error ? <p className="form-error">{error}</p> : null}
-          <button className="btn btn-primary" type="submit">
+          <BusyButton className="btn btn-primary" type="submit" busy={busy}>
             {t("Invite")}
-          </button>
+          </BusyButton>
         </form>
       ) : (
         <p className="muted">{t("Only an admin can invite.")}</p>
@@ -92,7 +131,7 @@ export default function TeamPage() {
       <ConfirmDialog
         open={drop !== null}
         title={t("Remove this colleague?")}
-        body={t("{name} and their balance leave this browser.", { name: drop?.name ?? "" })}
+        body={t("{name} and their balance leave this desk.", { name: drop?.name ?? "" })}
         confirmLabel={t("Remove")}
         onClose={() => setDrop(null)}
         onConfirm={() => {

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { BankFields } from "@/components/bank-fields";
+import { BusyButton } from "@/components/busy-button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CurrencyFlag } from "@/components/currency-flag";
 import { CurrencySelect } from "@/components/currency-select";
@@ -79,7 +80,7 @@ export default function SendPage() {
     event.preventDefault();
     if (busy) return;
     if (pin !== user?.pin) {
-      const message = t("PIN does not match this account. The 4-digit PIN is under Security.");
+      const message = t("PIN does not match this account.");
       toast(message);
       return setError(message);
     }
@@ -106,7 +107,7 @@ export default function SendPage() {
       setBusy(false);
       return setError(t(failed));
     }
-    toast(t("Transfer recorded in this browser."));
+    toast(t("Transfer sent."));
     setRef(`BW-${Math.floor(100000 + Math.random() * 900000)}`);
     setStep(2);
   }
@@ -124,7 +125,7 @@ export default function SendPage() {
             {held ? null : (
               <>
                 {" "}
-                {t("Reference")} <span className="mono">{ref}</span>. {t("Recorded in this browser. Not a live bank transfer.")}
+                {t("Reference")} <span className="mono">{ref}</span>.
               </>
             )}
           </p>
@@ -183,8 +184,8 @@ export default function SendPage() {
         <h1>{step === 0 ? t("Recipient") : t("Confirm")}</h1>
         <p className="lede">
           {step === 0
-            ? t("Use a US routing number or a SWIFT code. The 1% fee is shown before you confirm.")
-            : t("Check the amount and the fee, then authorize with the 4-digit PIN from Security.")}
+            ? t("US routing number or SWIFT. The 1% fee is included before you confirm.")
+            : t("Authorize with your PIN.")}
         </p>
       </header>
 
@@ -327,9 +328,9 @@ export default function SendPage() {
               <dd>{money(total, draft.currency, locale)}</dd>
             </div>
           </dl>
-          <p className="muted">{t("Enter the 4-digit PIN from Security. This records the transfer in this browser. It is not sent to a bank.")}</p>
+          <p className="muted">{t("PIN")}</p>
           <label className="field">
-            <span>{t("4-digit PIN")}</span>
+            <span>{t("PIN")}</span>
             <input type="password" inputMode="numeric" autoComplete="off" maxLength={4} value={pin} onChange={(event) => setPin(event.target.value)} />
           </label>
           {error ? <p className="form-error">{error}</p> : null}
@@ -337,16 +338,16 @@ export default function SendPage() {
             <button className="text-button" type="button" onClick={() => setStep(0)}>
               {t("Edit details")}
             </button>
-            <button className="btn btn-primary" type="submit" disabled={busy}>
+            <BusyButton className="btn btn-primary" type="submit" busy={busy}>
               {t("Confirm transfer")}
-            </button>
+            </BusyButton>
           </div>
         </form>
       )}
       <ConfirmDialog
         open={dropPayee !== null}
         title={t("Remove this recipient?")}
-        body={t("{name} leaves the saved recipients on this browser.", {
+        body={t("{name} leaves the saved recipients.", {
           name: payees.find((item) => item.id === dropPayee)?.holder ?? "",
         })}
         confirmLabel={t("Remove")}

@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { BusyButton } from "@/components/busy-button";
 import { useI18n } from "@/i18n/provider";
-import { CONTACT_EMAIL, CONTACT_PHONE, CONTACT_PHONE_DISPLAY } from "@/lib/contact";
+import { CONTACT_EMAIL, CONTACT_PHONE, CONTACT_PHONE_DISPLAY, CONTACT_WHATSAPP } from "@/lib/contact";
 
 function validEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -19,7 +20,8 @@ export function ContactForm({
   embedded?: boolean;
 }) {
   const [name, setName] = useState("");
-  const [email, setEmail] = useState(CONTACT_EMAIL);
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
   const [company, setCompany] = useState("");
   const [topic, setTopic] = useState("Accounts");
   const [message, setMessage] = useState("");
@@ -51,6 +53,7 @@ export function ContactForm({
     <form
       onSubmit={(event) => {
         event.preventDefault();
+        if (busy) return;
         if (name.trim().length < 2) {
           setError(t("Enter your name."));
           return;
@@ -67,8 +70,28 @@ export function ContactForm({
           setError(t("Add a short message."));
           return;
         }
+        setBusy(true);
         setError("");
-        setDone(true);
+        void fetch("/api/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: name.trim(),
+            email: email.trim(),
+            topic: fields === "sales" ? "Sales" : topic,
+            company: company.trim(),
+            message: message.trim(),
+          }),
+        })
+          .then((response) => {
+            if (!response.ok) {
+              setError(t("The message did not send. Try again."));
+              return;
+            }
+            setDone(true);
+          })
+          .catch(() => setError(t("The message did not send. Try again.")))
+          .finally(() => setBusy(false));
       }}
     >
           <label className="field">
@@ -137,9 +160,9 @@ export function ContactForm({
             <Link href="/" className="text-button">
               {t("Cancel")}
             </Link>
-            <button className="btn btn-primary" type="submit">
+            <BusyButton className="btn btn-primary" type="submit" busy={busy}>
               {fields === "sales" ? t("Talk to sales") : t("Send")}
-            </button>
+            </BusyButton>
           </div>
         </form>
   );
@@ -153,6 +176,10 @@ export function ContactForm({
           <h1>{t(title)}</h1>
           <p className="lede">
             <a href={`tel:${CONTACT_PHONE}`}>{CONTACT_PHONE_DISPLAY}</a>
+            {" · "}
+            <a href={CONTACT_WHATSAPP} target="_blank" rel="noopener noreferrer">
+              {t("WhatsApp")}
+            </a>
             {" · "}
             <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
           </p>

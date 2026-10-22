@@ -54,15 +54,19 @@ export default function DashboardPage() {
           <div>
             <p className="kicker">{t("Welcome back")}</p>
             <h1>{user.name}</h1>
-            <p className="desk-browser">
-              {t("This account stays in this browser. Movements are recorded here and are not live bank transfers.")}
+            <p className="desk-role">
+              <span className={user.role === "admin" ? "admin-pill is-role" : "admin-pill"}>
+                {user.role === "admin" ? t("Admin") : t("Member")}
+              </span>
             </p>
           </div>
-          {user.role === "admin" ? (
+          {user.role === "admin" || user.canCreate ? (
             <div className="desk-admin">
-              <Link className="btn btn-primary btn-sm" href="/dashboard/admin">
-                {t("Admin panel")}
-              </Link>
+              {user.role === "admin" ? (
+                <Link className="btn btn-primary btn-sm" href="/dashboard/admin">
+                  {t("Admin panel")}
+                </Link>
+              ) : null}
               <Link className="btn btn-sm" href="/dashboard/create">
                 {t("Create account")}
               </Link>
@@ -75,17 +79,20 @@ export default function DashboardPage() {
               ["/dashboard/schedule", "Schedule"],
               ["/dashboard/batch", "Batch"],
               ["/dashboard/approvals", "Approvals"],
-              ["/dashboard/team", "Team"],
+              ...(user.role === "admin" ? [["/dashboard/team", "Team"]] : []),
               ["/dashboard/developers", "Developers"],
             ] as const
-          ).map(([href, label]) => (
-            <Link key={href} className="btn btn-ghost btn-sm" href={href}>
-              {t(label)}
-              {label === "Approvals" && state.approvals.some((item) => item.status === "pending")
-                ? ` ${state.approvals.filter((item) => item.status === "pending").length}`
-                : ""}
-            </Link>
-          ))}
+          ).map(([href, label]) => {
+            const pending = state.approvals.filter(
+              (item) => item.status === "pending" && (user.role === "admin" || item.userId === user.id),
+            ).length;
+            return (
+              <Link key={href} className="btn btn-ghost btn-sm" href={href}>
+                {t(label)}
+                {label === "Approvals" && pending > 0 ? ` ${pending}` : ""}
+              </Link>
+            );
+          })}
         </div>
 
         <div className="desk-stage">

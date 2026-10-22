@@ -103,7 +103,7 @@ export default function ApprovalsPage() {
         title={ask?.approve ? t("Approve this transfer?") : t("Decline this transfer?")}
         body={
           ask?.approve
-            ? t("{amount} to {holder} is recorded in this browser.", { amount: ask.total, holder: ask.holder })
+            ? t("{amount} to {holder} will be sent.", { amount: ask.total, holder: ask.holder })
             : t("The transfer to {holder} stays off the balance.", { holder: ask?.holder ?? "" })
         }
         confirmLabel={ask?.approve ? t("Approve") : t("Decline")}

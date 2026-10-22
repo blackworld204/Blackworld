@@ -17,7 +17,7 @@ export function Motion() {
       if (!(target instanceof HTMLElement)) return;
       event.preventDefault();
       const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      target.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+      window.dispatchEvent(new CustomEvent("bw-seek", { detail: { node: target, instant: reduce } }));
       history.pushState(null, "", `${url.pathname}${url.search}${url.hash}`);
     };
     document.addEventListener("click", onClick, true);
@@ -33,7 +33,7 @@ export function Motion() {
     const tick = () => {
       const target = document.querySelector(hash);
       if (target instanceof HTMLElement) {
-        target.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+        window.dispatchEvent(new CustomEvent("bw-seek", { detail: { node: target, instant: reduce } }));
         return;
       }
       if (frames < 12) {

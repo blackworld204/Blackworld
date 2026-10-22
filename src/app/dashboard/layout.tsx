@@ -3,7 +3,7 @@
 import { AppShell } from "@/components/app-shell";
 import { DeskRunner } from "@/components/desk-runner";
 import { RequireSession } from "@/components/require-session";
-import { useSession } from "@/components/session";
+import { SignOutButton } from "@/components/sign-out-button";
 import { BankProvider, useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
 
@@ -21,7 +21,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
 function AccountGate({ children }: { children: React.ReactNode }) {
   const { state, user } = useAccount();
-  const { signOut } = useSession();
   const { t } = useI18n();
   if (!state) return <div className="app-hold" />;
   if (!user || user.status !== "active") {
@@ -30,11 +29,9 @@ function AccountGate({ children }: { children: React.ReactNode }) {
         <header className="app-intro">
           <p className="kicker">{t("Account")}</p>
           <h1>{user ? t("This account is inactive.") : t("No account")}</h1>
-          {user ? null : <p className="lede">{t("This sign-in has no account on this browser.")}</p>}
+          {user ? null : <p className="lede">{t("This sign-in has no account.")}</p>}
         </header>
-        <button className="btn btn-primary" type="button" onClick={signOut}>
-          {t("Sign out")}
-        </button>
+        <SignOutButton className="btn btn-primary" />
       </div>
     );
   }

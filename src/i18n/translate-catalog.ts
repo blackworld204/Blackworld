@@ -2,8 +2,10 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import engineCodes from "@/i18n/engine-codes.json";
 import source from "@/i18n/catalogs/id.json";
+import extraSource from "@/i18n/extra-source.json";
 import { fallbackLocale } from "@/i18n/fallbacks";
 import { catalog } from "@/i18n/messages";
+import { writtenLocale } from "@/i18n/written";
 
 type Engine = "edge" | "google";
 
@@ -13,6 +15,8 @@ const pending = new Map<string, Promise<Record<string, string>>>();
 export class UnsupportedLanguage extends Error {}
 
 const sourceKeys = Object.keys(source);
+const extraKeys = extraSource as string[];
+const extraPending = new Map<string, Promise<Record<string, string>>>();
 
 function shield(text: string) {
   const tokens: string[] = [];
@@ -181,7 +185,60 @@ async function translateLocale(locale: string) {
   return table;
 }
 
+function googleCode(locale: string) {
+  if (locale === "zh") return "zh-CN";
+  if (locale === "tl") return "fil";
+  return locale;
+}
+
+async function readExtra(locale: string) {
+  try {
+    const parsed = JSON.parse(await readFile(path.join(CACHE_DIR, `extra-${locale}.json`), "utf8")) as Record<string, string>;
+    if (extraKeys.every((key) => typeof parsed[key] === "string")) return parsed;
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+export function translateExtras(locale: string) {
+  const running = extraPending.get(locale);
+  if (running) return running;
+  const job = (async () => {
+    const cached = await readExtra(locale);
+    if (cached) return cached;
+    const spec = (engineCodes as Record<string, { engine: Engine; code: string }>)[locale];
+    const engine: Engine = spec?.engine ?? "google";
+    const code = spec?.code ?? googleCode(locale);
+    const shielded = extraKeys.map(shield);
+    const translated = await translateAll(
+      engine,
+      code,
+      locale,
+      shielded.map((item) => item.safe),
+    );
+    const table: Record<string, string> = {};
+    extraKeys.forEach((key, index) => {
+      try {
+        table[key] = restore(translated[index] ?? key, shielded[index].tokens);
+      } catch {
+        table[key] = key;
+      }
+    });
+    await mkdir(CACHE_DIR, { recursive: true });
+    const file = path.join(CACHE_DIR, `extra-${locale}.json`);
+    const temp = `${file}.${process.pid}.tmp`;
+    await writeFile(temp, JSON.stringify(table));
+    await rename(temp, file);
+    return table;
+  })().finally(() => extraPending.delete(locale));
+  extraPending.set(locale, job);
+  return job;
+}
+
 export function loadTranslation(locale: string) {
+  const written = writtenLocale(locale);
+  if (written !== locale) return loadTranslation(written);
   if (locale === "en") return Promise.resolve({});
   const via = fallbackLocale[locale];
   if (via && catalog[via]) return Promise.resolve(catalog[via]);
@@ -189,7 +246,15 @@ export function loadTranslation(locale: string) {
   if (builtin) return Promise.resolve(builtin);
   const running = pending.get(locale);
   if (running) return running;
-  const job = translateLocale(locale).finally(() => pending.delete(locale));
+  const job = translateLocale(locale)
+    .then(async (table) => {
+      try {
+        return { ...table, ...(await translateExtras(locale)) };
+      } catch {
+        return table;
+      }
+    })
+    .finally(() => pending.delete(locale));
   pending.set(locale, job);
   return job;
 }

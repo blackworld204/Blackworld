@@ -2,9 +2,12 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { BusyButton } from "@/components/busy-button";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
+import { authErrorMessage } from "@/components/session";
 import { addUser, money, type BankAddress } from "@/lib/bank";
+import { createPresentationUser } from "@/lib/firebase";
 
 const empty = {
   first: "",
@@ -30,7 +33,12 @@ export default function CreateAccountPage() {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<FormState>(empty);
   const [error, setError] = useState("");
-  const [done, setDone] = useState<{ email: string; last4: string | null; balance: number } | null>(null);
+  const [done, setDone] = useState<{
+    email: string;
+    last4: string | null;
+    balance: number;
+  } | null>(null);
+  const [busy, setBusy] = useState(false);
 
   if (!user) return <div className="app-hold" />;
   if (user.role !== "admin" && !user.canCreate) {
@@ -93,8 +101,13 @@ export default function CreateAccountPage() {
   function nextAddress(event: React.FormEvent) {
     event.preventDefault();
     const started = form.street.trim() || form.city.trim() || form.zip.trim();
-    if (started && (!form.street.trim() || !form.city.trim() || !form.zip.trim())) {
-      setError(t("Enter the street, city, and postal code, or skip the address."));
+    if (
+      started &&
+      (!form.street.trim() || !form.city.trim() || !form.zip.trim())
+    ) {
+      setError(
+        t("Enter the street, city, and postal code, or skip the address."),
+      );
       return;
     }
     setError("");
@@ -103,6 +116,7 @@ export default function CreateAccountPage() {
 
   function finish(event: React.FormEvent) {
     event.preventDefault();
+    if (busy) return;
     if (!/^\d{4}$/.test(form.pin)) {
       setError(t("PIN must be 4 digits."));
       return;
@@ -111,21 +125,34 @@ export default function CreateAccountPage() {
       setError(t("PIN entries do not match."));
       return;
     }
-    const result = addUser({
-      name,
-      email: form.email.trim(),
-      phone: form.phone.trim(),
-      pin: form.pin,
-      balance: Number.isFinite(balance) ? balance : 0,
-      address,
-      issueCard: form.card,
-    });
-    if (result.error) {
-      setError(t(result.error));
-      return;
-    }
-    setError("");
-    setDone({ email: form.email.trim(), last4: result.last4, balance: Number.isFinite(balance) ? balance : 0 });
+    setBusy(true);
+    void createPresentationUser(form.email.trim(), form.password)
+      .then(() => {
+        const result = addUser({
+          name,
+          email: form.email.trim(),
+          phone: form.phone.trim(),
+          pin: form.pin,
+          balance: Number.isFinite(balance) ? balance : 0,
+          address,
+          issueCard: form.card,
+        });
+        if (result.error) {
+          setError(t(result.error));
+          return;
+        }
+        setError("");
+        setForm((current) => ({ ...current, password: "" }));
+        setDone({
+          email: form.email.trim(),
+          last4: result.last4,
+          balance: Number.isFinite(balance) ? balance : 0,
+        });
+      })
+      .catch((reason: unknown) => {
+        setError(t(authErrorMessage(reason)));
+      })
+      .finally(() => setBusy(false));
   }
 
   if (done) {
@@ -134,7 +161,11 @@ export default function CreateAccountPage() {
         <header className="app-intro">
           <p className="kicker">{t("Account opened")}</p>
           <h1>{t("Ready.")}</h1>
-          <p className="lede">{t("{email} can sign in on this browser.", { email: done.email })}</p>
+          <p className="lede">
+            {t("{email} can sign in with the password you set.", {
+              email: done.email,
+            })}
+          </p>
         </header>
         <dl className="review">
           <div>
@@ -190,13 +221,15 @@ export default function CreateAccountPage() {
           {t("Step {current} of {total}", { current: step + 1, total: 3 })}
         </p>
         <h1>{titles[step]}</h1>
-        <p className="lede">
-          {step === 0
-            ? t("Name, email, phone, and the opening USD balance.")
-            : step === 1
-              ? t("Where statements for this account should go. You can skip this.")
-              : t("A 4-digit PIN authorizes transfers. A virtual card is issued unless you turn it off.")}
-        </p>
+        {step === 2 ? null : (
+          <p className="lede">
+            {step === 0
+              ? t("Name, email, phone, and the opening USD balance.")
+              : t(
+                  "Where statements for this account should go. You can skip this.",
+                )}
+          </p>
+        )}
         <div className="progress" style={{ ["--p" as string]: (step + 1) / 3 }}>
           <span />
         </div>
@@ -207,29 +240,56 @@ export default function CreateAccountPage() {
           <div className="split">
             <label className="field">
               <span>{t("First name")}</span>
-              <input value={form.first} autoComplete="given-name" onChange={(event) => set("first", event.target.value)} />
+              <input
+                value={form.first}
+                autoComplete="given-name"
+                onChange={(event) => set("first", event.target.value)}
+              />
             </label>
             <label className="field">
               <span>{t("Last name")}</span>
-              <input value={form.last} autoComplete="family-name" onChange={(event) => set("last", event.target.value)} />
+              <input
+                value={form.last}
+                autoComplete="family-name"
+                onChange={(event) => set("last", event.target.value)}
+              />
             </label>
           </div>
           <label className="field">
             <span>{t("Email")}</span>
-            <input type="email" autoComplete="email" value={form.email} onChange={(event) => set("email", event.target.value)} />
+            <input
+              type="email"
+              autoComplete="email"
+              value={form.email}
+              onChange={(event) => set("email", event.target.value)}
+            />
           </label>
           <label className="field">
             <span>{t("Password")}</span>
-            <input type="password" autoComplete="new-password" value={form.password} onChange={(event) => set("password", event.target.value)} />
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={form.password}
+              onChange={(event) => set("password", event.target.value)}
+            />
           </label>
-          <p className="muted">{t("At least 8 characters. Sign-in checks the length, then discards it.")}</p>
+          <p className="muted">{t("At least 8 characters.")}</p>
           <label className="field">
             <span>{t("Phone")}</span>
-            <input value={form.phone} autoComplete="tel" inputMode="tel" placeholder="+1 555 010 2400" onChange={(event) => set("phone", event.target.value)} />
+            <input
+              value={form.phone}
+              autoComplete="tel"
+              inputMode="tel"
+              onChange={(event) => set("phone", event.target.value)}
+            />
           </label>
           <label className="field">
             <span>{t("Opening balance (USD)")}</span>
-            <input inputMode="decimal" value={form.balance} onChange={(event) => set("balance", event.target.value)} />
+            <input
+              inputMode="decimal"
+              value={form.balance}
+              onChange={(event) => set("balance", event.target.value)}
+            />
           </label>
           {error ? <p className="form-error">{error}</p> : null}
           <button className="btn btn-primary" type="submit">
@@ -242,25 +302,48 @@ export default function CreateAccountPage() {
         <form className="stack" onSubmit={nextAddress}>
           <label className="field">
             <span>{t("Street")}</span>
-            <input value={form.street} autoComplete="street-address" onChange={(event) => set("street", event.target.value)} />
+            <input
+              value={form.street}
+              autoComplete="street-address"
+              onChange={(event) => set("street", event.target.value)}
+            />
           </label>
           <div className="split">
             <label className="field">
               <span>{t("City")}</span>
-              <input value={form.city} autoComplete="address-level2" onChange={(event) => set("city", event.target.value)} />
+              <input
+                value={form.city}
+                autoComplete="address-level2"
+                onChange={(event) => set("city", event.target.value)}
+              />
             </label>
             <label className="field">
               <span>{t("Postal code")}</span>
-              <input value={form.zip} autoComplete="postal-code" onChange={(event) => set("zip", event.target.value)} />
+              <input
+                value={form.zip}
+                autoComplete="postal-code"
+                onChange={(event) => set("zip", event.target.value)}
+              />
             </label>
           </div>
           <label className="field">
             <span>{t("Country")}</span>
-            <input value={form.country} autoComplete="country-name" onChange={(event) => set("country", event.target.value)} />
+            <input
+              value={form.country}
+              autoComplete="country-name"
+              onChange={(event) => set("country", event.target.value)}
+            />
           </label>
           {error ? <p className="form-error">{error}</p> : null}
           <div className="form-row">
-            <button className="text-button" type="button" onClick={() => { setError(""); setStep(0); }}>
+            <button
+              className="text-button"
+              type="button"
+              onClick={() => {
+                setError("");
+                setStep(0);
+              }}
+            >
               {t("Back")}
             </button>
             <button
@@ -308,29 +391,54 @@ export default function CreateAccountPage() {
             </div>
             <div>
               <dt>{t("Opening balance")}</dt>
-              <dd>{money(Number.isFinite(balance) ? balance : 0, "USD", locale)}</dd>
+              <dd>
+                {money(Number.isFinite(balance) ? balance : 0, "USD", locale)}
+              </dd>
             </div>
           </dl>
           <label className="field">
-            <span>{t("4-digit PIN")}</span>
-            <input inputMode="numeric" maxLength={4} autoComplete="off" value={form.pin} onChange={(event) => set("pin", event.target.value)} />
+            <span>{t("PIN")}</span>
+            <input
+              inputMode="numeric"
+              maxLength={4}
+              autoComplete="off"
+              value={form.pin}
+              onChange={(event) => set("pin", event.target.value)}
+            />
           </label>
           <label className="field">
             <span>{t("Confirm PIN")}</span>
-            <input inputMode="numeric" maxLength={4} autoComplete="off" value={form.confirm} onChange={(event) => set("confirm", event.target.value)} />
+            <input
+              inputMode="numeric"
+              maxLength={4}
+              autoComplete="off"
+              value={form.confirm}
+              onChange={(event) => set("confirm", event.target.value)}
+            />
           </label>
           <label className="choice-line">
-            <input type="checkbox" checked={form.card} onChange={(event) => set("card", event.target.checked)} />
+            <input
+              type="checkbox"
+              checked={form.card}
+              onChange={(event) => set("card", event.target.checked)}
+            />
             {t("Issue a virtual card")}
           </label>
           {error ? <p className="form-error">{error}</p> : null}
           <div className="form-row">
-            <button className="text-button" type="button" onClick={() => { setError(""); setStep(1); }}>
+            <button
+              className="text-button"
+              type="button"
+              onClick={() => {
+                setError("");
+                setStep(1);
+              }}
+            >
               {t("Back")}
             </button>
-            <button className="btn btn-primary" type="submit">
+            <BusyButton className="btn btn-primary" type="submit" busy={busy}>
               {t("Create account")}
-            </button>
+            </BusyButton>
           </div>
         </form>
       ) : null}

@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useI18n } from "@/i18n/provider";
-import { CONTACT_EMAIL } from "@/lib/contact";
 
 const SOURCE = `const blackworld = require("@blackworld/node");
 
@@ -17,7 +16,6 @@ const account = await blackworld.accounts.create({
   },
   owner: {
     name: "Jordan Lee",
-    email: "${CONTACT_EMAIL}",
   },
   currency: "USD",
 });
@@ -33,10 +31,6 @@ export function CodeSample() {
     <figure className="code-panel">
       <figcaption>
         <span>create-account.js</span>
-        <span className="code-meta">
-          <span className="status-dot" aria-hidden="true" />
-          47 ms
-        </span>
       </figcaption>
       <pre>
         <code>{SOURCE}</code>
@@ -58,7 +52,7 @@ export function CodeSample() {
           {copied ? t("Copied") : t("Copy")}
         </button>
         <p role="status" className="sr-only">
-          {copied ? t("Sample copied") : ""}
+          {copied ? t("Copied") : ""}
         </p>
       </div>
     </figure>

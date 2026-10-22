@@ -11,7 +11,9 @@ import { Motion } from "@/components/motion";
 import { SmoothScroll } from "@/components/smooth-scroll";
 import { PushBridge } from "@/components/push-bridge";
 import { I18nProvider } from "@/i18n/provider";
+import { DeskSync } from "@/components/desk-sync";
 import { SessionProvider } from "@/components/session";
+import { VaultBoot } from "@/components/vault-boot";
 import "./globals.css";
 
 const sans = Instrument_Sans({
@@ -61,6 +63,8 @@ export default function RootLayout({
       <body>
         <I18nProvider>
           <SessionProvider>
+            <VaultBoot />
+            <DeskSync />
             <Motion />
             <SmoothScroll />
             <PushBridge />
