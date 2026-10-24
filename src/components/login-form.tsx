@@ -9,7 +9,6 @@ import { SignOutButton } from "@/components/sign-out-button";
 import { useI18n } from "@/i18n/provider";
 import { authErrorMessage } from "@/components/session";
 import { consumeRecoveryCode, hydrateBank, loadBank, userByEmail } from "@/lib/bank";
-import { CONTACT_EMAIL } from "@/lib/contact";
 import { whenDeskReady } from "@/lib/desk-sync";
 import { isSealed } from "@/lib/sealed";
 import { checkSealedCode, checkSealedPin } from "@/lib/vault-client";
@@ -43,8 +42,10 @@ export function LoginForm() {
   const router = useRouter();
   const { session, signIn } = useSession();
   const { t } = useI18n();
-  const [email, setEmail] = useState(CONTACT_EMAIL);
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [pin, setPin] = useState("");
   const [code, setCode] = useState("");
@@ -80,6 +81,7 @@ export function LoginForm() {
           <h1>{t("Login")}</h1>
         </header>
         <form
+          autoComplete="off"
           onSubmit={(event) => {
             event.preventDefault();
             if (busy) return;
@@ -140,8 +142,16 @@ export function LoginForm() {
             <span>{t("Email")}</span>
             <input
               type="email"
-              autoComplete="username"
+              name="login-email"
+              autoComplete="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              readOnly={!emailOpen}
               value={email}
+              onFocus={(event) => {
+                event.currentTarget.readOnly = false;
+                setEmailOpen(true);
+              }}
               onChange={(event) => {
                 setEmail(event.target.value);
                 setChecks(null);
@@ -156,8 +166,14 @@ export function LoginForm() {
             <span className="secret">
               <input
                 type={showPassword ? "text" : "password"}
-                autoComplete="current-password"
+                name="login-secret"
+                autoComplete="off"
+                readOnly={!passwordOpen}
                 value={password}
+                onFocus={(event) => {
+                  event.currentTarget.readOnly = false;
+                  setPasswordOpen(true);
+                }}
                 onChange={(event) => {
                   setPassword(event.target.value);
                   setChecks(null);
