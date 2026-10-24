@@ -40,7 +40,25 @@ const endpoints = [
     id: "quote",
     method: "POST",
     path: "/fx/quotes",
-    detail: "Lock a conversion. Average fee 0.5%.",
+    detail: "Price a conversion. The fee is 0.5%.",
+  },
+  {
+    id: "exchange",
+    method: "POST",
+    path: "/fx/exchanges",
+    detail: "Convert a balance at the same rate the desk shows.",
+  },
+  {
+    id: "deposits",
+    method: "POST",
+    path: "/deposits",
+    detail: "Record a wire or card deposit. The fee is 2.5%.",
+  },
+  {
+    id: "approvals",
+    method: "POST",
+    path: "/approvals/:id",
+    detail: "An admin approves or declines a waiting transfer.",
   },
 ];
 

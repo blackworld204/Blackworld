@@ -37,6 +37,20 @@ export function convert(amount: number, from: Currency, to: Currency) {
   return usd * to.perUsd;
 }
 
+export function roundMoney(code: string, value: number) {
+  const factor = code === "JPY" ? 1 : 100;
+  return Math.round(value * factor) / factor;
+}
+
+/** Same 0.5% quote the converter, the exchange screen, and /api/v1 use. */
+export function quoteConversion(amount: number, from: Currency, to: Currency) {
+  const rounded = roundMoney(from.code, amount);
+  const fee = roundMoney(from.code, rounded * FEE_RATE);
+  const converted = roundMoney(to.code, convert(rounded - fee, from, to));
+  const rate = from.perUsd === 0 ? Number.NaN : to.perUsd / from.perUsd;
+  return { from: from.code, to: to.code, amount: rounded, fee, converted, rate };
+}
+
 export function formatAmount(code: string, value: number) {
   const digits = code === "JPY" ? 0 : 2;
   return new Intl.NumberFormat("en-US", {

@@ -100,11 +100,11 @@ export function NoticeDialog({
         >
           <label className="field">
             <span>{t("Title")}</span>
-            <input value={title} maxLength={80} onChange={(event) => setTitle(event.target.value)} />
+            <input value={title} maxLength={80} disabled={busy} onChange={(event) => setTitle(event.target.value)} />
           </label>
           <label className="field">
             <span>{t("Message")}</span>
-            <textarea className="notice-body" value={body} maxLength={400} onChange={(event) => setBody(event.target.value)} />
+            <textarea className="notice-body" value={body} maxLength={400} disabled={busy} onChange={(event) => setBody(event.target.value)} />
           </label>
           {error ? <p className="form-error" role="alert">{error}</p> : null}
           <button className="btn btn-primary" type="submit" disabled={busy} aria-busy={busy || undefined}>

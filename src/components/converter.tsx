@@ -5,7 +5,7 @@ import { CurrencyFlag } from "@/components/currency-flag";
 import { CurrencySelect } from "@/components/currency-select";
 import { useLiveRates } from "@/components/use-live-rates";
 import { useI18n } from "@/i18n/provider";
-import { FEE_RATE, PREVIEW_CODES, convert, formatAmount, formatQuoteTime, formatRate } from "@/lib/rates";
+import { PREVIEW_CODES, formatAmount, formatQuoteTime, formatRate, quoteConversion } from "@/lib/rates";
 import { localeTag } from "@/lib/bank";
 
 export function Converter() {
@@ -30,10 +30,10 @@ export function Converter() {
   const to = rates.find((item) => item.code === toCode) ?? rates[1];
   const parsed = Number(amount.replace(/,/g, ""));
   const invalid = amount.trim() !== "" && (!Number.isFinite(parsed) || parsed < 0);
-  const net = invalid || amount.trim() === "" ? Number.NaN : parsed * (1 - FEE_RATE);
-  const received = Number.isFinite(net) ? convert(net, from, to) : Number.NaN;
-  const pair = from.perUsd === 0 ? Number.NaN : to.perUsd / from.perUsd;
-  const fee = Number.isFinite(parsed) && parsed >= 0 ? parsed * FEE_RATE : Number.NaN;
+  const quoted = !invalid && amount.trim() !== "" && parsed >= 0 ? quoteConversion(parsed, from, to) : null;
+  const received = quoted && Number.isFinite(quoted.converted) ? quoted.converted : Number.NaN;
+  const pair = quoted && Number.isFinite(quoted.rate) ? quoted.rate : Number.NaN;
+  const fee = quoted ? quoted.fee : Number.NaN;
 
   const visible = useMemo(
     () => (showAll ? rates : rates.filter((item) => PREVIEW_CODES.includes(item.code))),

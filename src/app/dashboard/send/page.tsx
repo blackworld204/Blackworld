@@ -10,7 +10,8 @@ import { CurrencySelect } from "@/components/currency-select";
 import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
-import { MONEY, addApproval, addPayee, money, needsApproval, payTransfer, removePayee, type MoneyCode } from "@/lib/bank";
+import { MONEY, addPayee, money, removePayee, type MoneyCode } from "@/lib/bank";
+import { postAccount } from "@/lib/flow-api";
 import { countryOfBank, swiftOfBank } from "@/lib/banks";
 
 type Draft = {
@@ -104,21 +105,21 @@ export default function SendPage() {
       amount,
       currency: draft.currency,
     };
-    if (needsApproval(user!, total)) {
-      addApproval({ ...payment, userId: user!.id });
-      toast(t("Waiting for an admin to approve."));
-      setHeld(true);
+    void postAccount<{ status?: string }>("payments", payment).then((result) => {
+      if (result.error) {
+        setBusy(false);
+        setError(t(result.error));
+        return;
+      }
+      if (result.body?.status === "pending") {
+        toast(t("Waiting for an admin to approve."));
+        setHeld(true);
+      } else {
+        toast(t("Transfer sent."));
+        setRef(`BW-${Math.floor(100000 + Math.random() * 900000)}`);
+      }
       setStep(2);
-      return;
-    }
-    const failed = payTransfer(user!.id, payment);
-    if (failed) {
-      setBusy(false);
-      return setError(t(failed));
-    }
-    toast(t("Transfer sent."));
-    setRef(`BW-${Math.floor(100000 + Math.random() * 900000)}`);
-    setStep(2);
+    });
   }
 
   if (step === 2) {

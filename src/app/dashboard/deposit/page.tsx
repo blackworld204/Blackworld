@@ -9,7 +9,8 @@ import { CurrencyFlag } from "@/components/currency-flag";
 import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
-import { money, moveMoney } from "@/lib/bank";
+import { depositBreakdown, money } from "@/lib/bank";
+import { postAccount } from "@/lib/flow-api";
 
 export default function DepositPage() {
   const { state, user } = useAccount();
@@ -26,8 +27,9 @@ export default function DepositPage() {
   const chargeable = cards.filter((card) => !card.frozen);
   const card = chargeable.find((item) => item.primary) ?? chargeable[0];
   const value = Number(amount);
-  const fee = Number.isFinite(value) ? Math.round(value * 0.025 * 100) / 100 : 0;
-  const credit = Number.isFinite(value) ? Math.round((value - fee) * 100) / 100 : 0;
+  const breakdown = Number.isFinite(value) && value > 0 ? depositBreakdown(value) : null;
+  const fee = breakdown?.fee ?? 0;
+  const credit = breakdown?.credit ?? 0;
 
   function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -46,22 +48,16 @@ export default function DepositPage() {
     if (busy || !user) return;
     setAsk(false);
     setBusy(true);
-    const failed = moveMoney(user.id, "USD", credit, {
-      title: method === "wire" ? "Wire deposit" : "Card deposit",
-      detail:
-        method === "wire"
-          ? `Fee ${money(fee, "USD", locale)}`
-          : `Card •••• ${card?.last4 ?? ""} · fee ${money(fee, "USD", locale)}`,
-      amount: credit,
-      direction: "in",
+    void postAccount<{ amount?: number }>("deposits", { amount: value, method }).then((result) => {
+      if (result.error || typeof result.body?.amount !== "number") {
+        setBusy(false);
+        setError(t(result.error || "The request failed."));
+        return;
+      }
+      setError("");
+      toast(t("Deposit recorded."));
+      setDone(result.body.amount);
     });
-    if (failed) {
-      setBusy(false);
-      return setError(failed);
-    }
-    setError("");
-    toast(t("Deposit recorded."));
-    setDone(credit);
   }
 
   if (done !== null) {

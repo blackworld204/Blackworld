@@ -9,8 +9,9 @@ import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
 import { useLiveRates } from "@/components/use-live-rates";
 import { useI18n } from "@/i18n/provider";
-import { MONEY, localeTag, money, settleExchange, type MoneyCode } from "@/lib/bank";
-import { formatQuoteTime } from "@/lib/rates";
+import { MONEY, localeTag, money, type MoneyCode } from "@/lib/bank";
+import { postAccount } from "@/lib/flow-api";
+import { formatQuoteTime, quoteConversion } from "@/lib/rates";
 
 export default function ExchangePage() {
   const { user } = useAccount();
@@ -26,21 +27,15 @@ export default function ExchangePage() {
   const [busy, setBusy] = useState(false);
   const [ask, setAsk] = useState(false);
 
-  function perUsd(code: MoneyCode) {
-    return rates.find((rate) => rate.code === code)?.perUsd ?? 1;
-  }
-
   const value = Number(amount);
   const quote = useMemo(() => {
     if (!Number.isFinite(value) || value <= 0 || from === to) return null;
-    const usd = value / perUsd(from);
-    const fee = usd * 0.005;
-    const received = (usd - fee) * perUsd(to);
-    return {
-      fee: fee * perUsd(from),
-      received,
-      rate: perUsd(to) / perUsd(from),
-    };
+    const source = rates.find((rate) => rate.code === from);
+    const target = rates.find((rate) => rate.code === to);
+    if (!source || !target) return null;
+    const quoted = quoteConversion(value, source, target);
+    if (!Number.isFinite(quoted.converted) || !Number.isFinite(quoted.rate)) return null;
+    return { fee: quoted.fee, received: quoted.converted, rate: quoted.rate };
   }, [value, from, to, rates]);
 
   if (!user) return <div className="app-hold" />;
@@ -64,14 +59,15 @@ export default function ExchangePage() {
     if (busy || !held || !user) return;
     setAsk(false);
     setBusy(true);
-    const received = Math.round(held.received * 100) / 100;
-    const failed = settleExchange(user.id, from, to, value, received, money(held.fee, from, locale));
-    if (failed) {
-      setBusy(false);
-      return setError(t(failed));
-    }
-    toast(t("Exchange recorded."));
-    setDone(money(received, to, locale));
+    void postAccount<{ converted?: number }>("fx/exchanges", { from, to, amount: value }).then((result) => {
+      if (result.error || typeof result.body?.converted !== "number") {
+        setBusy(false);
+        setError(t(result.error || "Rates are not available."));
+        return;
+      }
+      toast(t("Exchange recorded."));
+      setDone(money(result.body.converted, to, locale));
+    });
   }
 
   if (done) {

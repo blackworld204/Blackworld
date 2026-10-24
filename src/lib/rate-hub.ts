@@ -92,6 +92,21 @@ function ensure() {
   timer = setInterval(() => void pull(), 4000);
 }
 
+/** The book the dashboard is showing, or the same fallback the dashboard uses. */
+export async function quotedRateBook(): Promise<RateBook> {
+  if (latest.status !== "live") await pull();
+  if (latest.status === "live" || (latest.status === "sandbox" && latest.rates.length > 0)) return latest;
+  try {
+    const daily = await loadLiveRates();
+    publish(daily);
+    return daily;
+  } catch {
+    const sandbox: RateBook = { rates: SANDBOX_RATES, date: null, asOf: null, status: "sandbox" };
+    publish(sandbox);
+    return sandbox;
+  }
+}
+
 export function subscribeRateHub(listener: Listener) {
   listeners.add(listener);
   listener(latest);

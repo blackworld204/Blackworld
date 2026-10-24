@@ -6,6 +6,7 @@ import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
 import { decideApproval, money, setApprovalLimit, when } from "@/lib/bank";
+import { postAccount } from "@/lib/flow-api";
 
 export default function ApprovalsPage() {
   const { state, user } = useAccount();
@@ -117,13 +118,24 @@ export default function ApprovalsPage() {
         onClose={() => setAsk(null)}
         onConfirm={() => {
           if (!ask) return;
-          const failed = decideApproval(ask.id, user.id, ask.approve);
+          const choice = ask;
           setAsk(null);
-          if (failed) {
-            toast(t(failed));
-            return;
-          }
-          toast(ask.approve ? t("Approved.") : t("Declined."));
+          void postAccount("approvals/" + choice.id, { approve: choice.approve }).then((result) => {
+            if (result.status === 404) {
+              const failed = decideApproval(choice.id, user.id, choice.approve);
+              if (failed) {
+                toast(t(failed));
+                return;
+              }
+              toast(choice.approve ? t("Approved.") : t("Declined."));
+              return;
+            }
+            if (result.error) {
+              toast(t(result.error));
+              return;
+            }
+            toast(choice.approve ? t("Approved.") : t("Declined."));
+          });
         }}
       />
       <ConfirmDialog

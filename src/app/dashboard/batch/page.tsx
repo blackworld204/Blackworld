@@ -8,7 +8,8 @@ import { CurrencySelect } from "@/components/currency-select";
 import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
-import { MONEY, addApproval, money, needsApproval, payTransfer, transferFee, type MoneyCode } from "@/lib/bank";
+import { MONEY, money, transferFee, type MoneyCode } from "@/lib/bank";
+import { postAccount } from "@/lib/flow-api";
 import { swiftOfBank } from "@/lib/banks";
 import { emptyBalances } from "@/lib/currencies";
 
@@ -67,35 +68,27 @@ export default function BatchPage() {
     const linesToSend = pending;
     setPending(null);
     setBusy(true);
-    let paid = 0;
-    let held = 0;
-    for (const line of linesToSend) {
-      const payment = {
-        holder: line.holder.trim(),
-        bank: bank.trim(),
-        routing: routing.trim(),
-        swift: swift.trim(),
-        account: line.account.trim(),
-        note: "",
-        amount: line.value,
-        currency: line.currency,
-      };
-      const total = line.value + transferFee(line.value);
-      if (needsApproval(user, total)) {
-        addApproval({ ...payment, userId: user.id });
-        held += 1;
-        continue;
-      }
-      const failed = payTransfer(user.id, payment);
-      if (failed) {
+    const payments = linesToSend.map((line) => ({
+      holder: line.holder.trim(),
+      bank: bank.trim(),
+      routing: routing.trim(),
+      swift: swift.trim(),
+      account: line.account.trim(),
+      note: "",
+      amount: line.value,
+      currency: line.currency,
+    }));
+    void postAccount<{ payments?: { status?: string }[] }>("payments/batch", { payments }).then((result) => {
+      if (result.error || !result.body?.payments) {
         setBusy(false);
-        setError(t(failed));
+        setError(t(result.error || "The request failed."));
         return;
       }
-      paid += 1;
-    }
-    setDone({ paid, held });
-    toast(t("Batch sent."));
+      const held = result.body.payments.filter((item) => item.status === "pending").length;
+      const paid = result.body.payments.filter((item) => item.status === "paid").length;
+      setDone({ paid, held });
+      toast(t("Batch sent."));
+    });
   }
 
   if (done) {

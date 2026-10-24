@@ -58,7 +58,7 @@ export default function SchedulePage() {
     if (!user) return;
     setAsk(false);
     const value = Number(amount);
-    const status = addSchedule({
+    void addSchedule({
       userId: user!.id,
       holder: holder.trim(),
       bank: bank.trim(),
@@ -69,28 +69,29 @@ export default function SchedulePage() {
       amount: value,
       currency,
       runOn,
+    }).then((status) => {
+      setHolder("");
+      setBank("");
+      setRouting("");
+      setSwift("");
+      setAccount("");
+      setNote("");
+      setAmount("");
+      setRunOn("");
+      setPin("");
+      setError("");
+      toast(
+        t(
+          status === "failed"
+            ? "Not enough balance."
+            : status === "held"
+              ? "Waiting for an admin to approve."
+              : status === "paid"
+                ? "Transfer sent."
+                : "Scheduled.",
+        ),
+      );
     });
-    setHolder("");
-    setBank("");
-    setRouting("");
-    setSwift("");
-    setAccount("");
-    setNote("");
-    setAmount("");
-    setRunOn("");
-    setPin("");
-    setError("");
-    toast(
-      t(
-        status === "failed"
-          ? "Not enough balance."
-          : status === "held"
-            ? "Waiting for an admin to approve."
-            : status === "paid"
-              ? "Transfer sent."
-              : "Scheduled.",
-      ),
-    );
   }
 
   return (

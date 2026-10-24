@@ -11,7 +11,7 @@ export function DeskRunner() {
   useEffect(() => {
     if (!user || ran.current === user.id) return;
     ran.current = user.id;
-    runDueSchedules(user.id);
+    void runDueSchedules(user.id);
   }, [user]);
 
   return null;
