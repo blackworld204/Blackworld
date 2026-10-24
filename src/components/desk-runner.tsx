@@ -2,16 +2,16 @@
 
 import { useEffect, useRef } from "react";
 import { useAccount } from "@/components/use-account";
-import { runDueSchedules } from "@/lib/bank";
+import { postAccount } from "@/lib/flow-api";
 
 export function DeskRunner() {
   const { user } = useAccount();
-  const ran = useRef("");
+  const ran = useRef(false);
 
   useEffect(() => {
-    if (!user || ran.current === user.id) return;
-    ran.current = user.id;
-    void runDueSchedules(user.id);
+    if (!user || ran.current) return;
+    ran.current = true;
+    void postAccount("schedules/run", {});
   }, [user]);
 
   return null;

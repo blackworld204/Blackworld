@@ -88,7 +88,7 @@ export function ContactForm({
           return;
         }
         if (!validEmail(email)) {
-          setError(t("Enter a work email."));
+          setError(t("Enter an email."));
           return;
         }
         if (fields === "sales" && company.trim().length < 2) {
@@ -115,7 +115,7 @@ export function ContactForm({
             />
           </label>
           <label className="field">
-            <span>{t("Work email")}</span>
+            <span>{t("Email")}</span>
             <input
               type="email"
               autoComplete="email"

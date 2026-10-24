@@ -45,7 +45,7 @@ export default function TeamPage() {
     if (busy) return;
     if (user?.role !== "admin") return setError(t("Only an admin can invite."));
     if (name.trim().length < 2) return setError(t("Enter a name."));
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return setError(t("Enter a work email."));
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return setError(t("Enter an email."));
     if (!isStrongPassword(password)) return setError(t(strongPasswordMessage));
     if (phone.trim().length < 6) return setError(t("Enter a phone number."));
     setError("");
@@ -120,7 +120,7 @@ export default function TeamPage() {
             <input value={name} onChange={(event) => setName(event.target.value)} />
           </label>
           <label className="field">
-            <span>{t("Work email")}</span>
+            <span>{t("Email")}</span>
             <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
           </label>
           <label className="field">

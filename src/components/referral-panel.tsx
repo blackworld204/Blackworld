@@ -40,7 +40,7 @@ export function ReferralPanel() {
   function submit(event: React.FormEvent) {
     event.preventDefault();
     if (company.trim().length < 2) return setError(t("Enter the company name."));
-    if (!validEmail(email)) return setError(t("Enter a work email."));
+    if (!validEmail(email)) return setError(t("Enter an email."));
     setError("");
     setAsk(true);
   }
@@ -88,7 +88,7 @@ export function ReferralPanel() {
             <input value={company} onChange={(event) => setCompany(event.target.value)} />
           </label>
           <label className="field">
-            <span>{t("Work email")}</span>
+            <span>{t("Email")}</span>
             <input
               type="email"
               value={email}

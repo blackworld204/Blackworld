@@ -10,10 +10,24 @@ import { TwoFactorPanel } from "@/components/two-factor";
 import { useAccount } from "@/components/use-account";
 import { SignOutButton } from "@/components/sign-out-button";
 import { useI18n } from "@/i18n/provider";
-import { MONEY, addNote, alertsOf, patchUser, privacyOf, type BankUser, type MoneyCode } from "@/lib/bank";
+import {
+  MONEY,
+  addNote,
+  alertsOf,
+  patchUser,
+  privacyOf,
+  type BankUser,
+  type MoneyCode,
+} from "@/lib/bank";
 import { clearPhoto, loadPhoto, savePhoto } from "@/lib/photos";
 import { bindFirebasePush, releaseFirebasePush } from "@/lib/firebase-push";
-import { disablePush, enablePush, pushStatus, showPush, type PushStatus } from "@/lib/push";
+import {
+  disablePush,
+  enablePush,
+  pushStatus,
+  showPush,
+  type PushStatus,
+} from "@/lib/push";
 
 type Section = "profile" | "security" | "notifications" | "privacy";
 
@@ -46,7 +60,10 @@ function SettingsForm({ user }: { user: BankUser }) {
   const { t } = useI18n();
   const fileRef = useRef<HTMLInputElement>(null);
   const initial = splitName(user.name);
-  const [section, setSection] = useState<Section>("profile");
+  const adminDesk = user.role === "admin";
+  const [section, setSection] = useState<Section>(
+    adminDesk ? "notifications" : "profile",
+  );
   const [first, setFirst] = useState(initial.first);
   const [last, setLast] = useState(initial.last);
   const [phone, setPhone] = useState(user.phone);
@@ -61,9 +78,19 @@ function SettingsForm({ user }: { user: BankUser }) {
   const [push, setPush] = useState<PushStatus>("off");
   const [pushError, setPushError] = useState("");
   const [askPhoto, setAskPhoto] = useState(false);
-  const [pending, setPending] = useState<{ title: string; body: string; label: string; run: () => void } | null>(null);
+  const [pending, setPending] = useState<{
+    title: string;
+    body: string;
+    label: string;
+    run: () => void;
+  } | null>(null);
 
-  function askChange(title: string, body: string, label: string, run: () => void) {
+  function askChange(
+    title: string,
+    body: string,
+    label: string,
+    run: () => void,
+  ) {
     setPending({ title, body, label, run });
   }
 
@@ -72,9 +99,19 @@ function SettingsForm({ user }: { user: BankUser }) {
   const initials = `${first.charAt(0)}${last.charAt(0)}`.toUpperCase() || "BW";
 
   useEffect(() => {
-    setSection(sectionFromHash(window.location.hash.replace("#", "")));
+    if (adminDesk) {
+      setSection("notifications");
+      if (window.location.hash !== "#alerts")
+        window.history.replaceState(
+          null,
+          "",
+          `${window.location.pathname}#alerts`,
+        );
+    } else {
+      setSection(sectionFromHash(window.location.hash.replace("#", "")));
+    }
     setPush(pushStatus());
-  }, []);
+  }, [adminDesk]);
 
   useEffect(() => {
     let alive = true;
@@ -99,7 +136,8 @@ function SettingsForm({ user }: { user: BankUser }) {
 
   function openSection(next: Section) {
     setSection(next);
-    const hash = next === "notifications" ? "alerts" : next === "profile" ? "" : next;
+    const hash =
+      next === "notifications" ? "alerts" : next === "profile" ? "" : next;
     const url = hash ? `#${hash}` : window.location.pathname;
     window.history.replaceState(null, "", url);
   }
@@ -117,10 +155,18 @@ function SettingsForm({ user }: { user: BankUser }) {
       return;
     }
     setError("");
-    askChange(t("Save this profile?"), t("The name and phone number on this account change."), t("Save profile"), () => {
-      patchUser(user.id, { name: `${first.trim()} ${last.trim()}`, phone: phone.trim() });
-      setSaved(t("Profile saved."));
-    });
+    askChange(
+      t("Save this profile?"),
+      t("The name and phone number on this account change."),
+      t("Save profile"),
+      () => {
+        patchUser(user.id, {
+          name: `${first.trim()} ${last.trim()}`,
+          phone: phone.trim(),
+        });
+        setSaved(t("Profile saved."));
+      },
+    );
   }
 
   async function onPhoto(event: React.ChangeEvent<HTMLInputElement>) {
@@ -138,12 +184,17 @@ function SettingsForm({ user }: { user: BankUser }) {
       return;
     }
     setError("");
-    askChange(t("Use this photo?"), t("It replaces the photo on this account."), t("Use photo"), () => {
-      void savePhoto(user.id, file).then(() => {
-        patchUser(user.id, { hasPhoto: true });
-        setSaved(t("Photo updated."));
-      });
-    });
+    askChange(
+      t("Use this photo?"),
+      t("It replaces the photo on this account."),
+      t("Use photo"),
+      () => {
+        void savePhoto(user.id, file).then(() => {
+          patchUser(user.id, { hasPhoto: true });
+          setSaved(t("Photo updated."));
+        });
+      },
+    );
   }
 
   async function removePhoto() {
@@ -170,21 +221,26 @@ function SettingsForm({ user }: { user: BankUser }) {
       return;
     }
     setPinError("");
-    askChange(t("Change the transfer PIN?"), t("Transfers use the new PIN."), t("Change PIN"), () => {
-    patchUser(user.id, { pin: pinNext });
-    if (alerts.security) {
-      addNote({
-        userId: user.id,
-        title: "PIN updated",
-        body: "The transfer PIN for this account was changed.",
-      });
-    }
-    setPinCurrent("");
-    setPinNext("");
-    setPinConfirm("");
-    setPinError("");
-    setPinMessage(t("PIN updated."));
-    });
+    askChange(
+      t("Change the transfer PIN?"),
+      t("Transfers use the new PIN."),
+      t("Change PIN"),
+      () => {
+        patchUser(user.id, { pin: pinNext });
+        if (alerts.security) {
+          addNote({
+            userId: user.id,
+            title: "PIN updated",
+            body: "The transfer PIN for this account was changed.",
+          });
+        }
+        setPinCurrent("");
+        setPinNext("");
+        setPinConfirm("");
+        setPinError("");
+        setPinMessage(t("PIN updated."));
+      },
+    );
   }
 
   function downloadProfile() {
@@ -194,7 +250,9 @@ function SettingsForm({ user }: { user: BankUser }) {
       phone: user.phone,
       memberSince: user.memberSince,
     };
-    const blob = new Blob([JSON.stringify(copy, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(copy, null, 2)], {
+      type: "application/json",
+    });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -206,25 +264,31 @@ function SettingsForm({ user }: { user: BankUser }) {
   return (
     <div className="app-pad">
       <header className="app-intro">
-        <p className="kicker">{t("Settings")}</p>
-        <h1>{t("Settings")}</h1>
-        <p className="lede">{t("Manage your account preferences")}</p>
+        <p className="kicker">{adminDesk ? t("Admin") : t("Settings")}</p>
+        <h1>{adminDesk ? t("Notification settings") : t("Settings")}</h1>
+        {adminDesk ? null : (
+          <p className="lede">{t("Manage your account preferences")}</p>
+        )}
       </header>
 
-      <div className="settings-layout">
-        <nav className="settings-nav" aria-label={t("Settings")}>
-          {SECTIONS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              aria-current={section === item.id ? "page" : undefined}
-              onClick={() => openSection(item.id)}
-            >
-              {t(item.label)}
-            </button>
-          ))}
-          <SignOutButton className="settings-out" />
-        </nav>
+      <div
+        className={adminDesk ? "settings-layout is-alerts" : "settings-layout"}
+      >
+        {adminDesk ? null : (
+          <nav className="settings-nav" aria-label={t("Settings")}>
+            {SECTIONS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                aria-current={section === item.id ? "page" : undefined}
+                onClick={() => openSection(item.id)}
+              >
+                {t(item.label)}
+              </button>
+            ))}
+            <SignOutButton className="settings-out" />
+          </nav>
+        )}
 
         <div className="settings-panel">
           {section === "profile" ? (
@@ -232,28 +296,54 @@ function SettingsForm({ user }: { user: BankUser }) {
               <h2>{t("Personal information")}</h2>
               <div className="identity">
                 <div className="avatar" aria-hidden="true">
-                  {photoUrl ? <img src={photoUrl} alt="" /> : <span>{initials}</span>}
+                  {photoUrl ? (
+                    <img src={photoUrl} alt="" />
+                  ) : (
+                    <span>{initials}</span>
+                  )}
                 </div>
                 <div className="identity-actions">
-                  <button type="button" className="btn btn-ghost" onClick={() => fileRef.current?.click()}>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => fileRef.current?.click()}
+                  >
                     {t("Change photo")}
                   </button>
                   {user.hasPhoto ? (
-                    <button type="button" className="text-button" onClick={() => setAskPhoto(true)}>
+                    <button
+                      type="button"
+                      className="text-button"
+                      onClick={() => setAskPhoto(true)}
+                    >
                       {t("Remove photo")}
                     </button>
                   ) : null}
-                  <input ref={fileRef} className="sr-only" type="file" accept="image/*" onChange={onPhoto} />
+                  <input
+                    ref={fileRef}
+                    className="sr-only"
+                    type="file"
+                    accept="image/*"
+                    onChange={onPhoto}
+                  />
                 </div>
               </div>
               <div className="split">
                 <label className="field">
                   <span>{t("First name")}</span>
-                  <input value={first} onChange={(event) => setFirst(event.target.value)} autoComplete="given-name" />
+                  <input
+                    value={first}
+                    onChange={(event) => setFirst(event.target.value)}
+                    autoComplete="given-name"
+                  />
                 </label>
                 <label className="field">
                   <span>{t("Last name")}</span>
-                  <input value={last} onChange={(event) => setLast(event.target.value)} autoComplete="family-name" />
+                  <input
+                    value={last}
+                    onChange={(event) => setLast(event.target.value)}
+                    autoComplete="family-name"
+                  />
                 </label>
               </div>
               <label className="field">
@@ -261,7 +351,11 @@ function SettingsForm({ user }: { user: BankUser }) {
                 <input value={user.email} readOnly />
               </label>
               <div className="field">
-                <PhoneInput label={t("Phone number")} value={phone} onChange={setPhone} />
+                <PhoneInput
+                  label={t("Phone number")}
+                  value={phone}
+                  onChange={setPhone}
+                />
               </div>
               {error ? <p className="form-error">{error}</p> : null}
               {saved ? <p>{saved}</p> : null}
@@ -284,14 +378,21 @@ function SettingsForm({ user }: { user: BankUser }) {
               <LanguageSelect variant="list" />
 
               <h2>{t("Desk currency")}</h2>
-              <p className="muted">{t("Balances and activity open in this currency.")}</p>
+              <p className="muted">
+                {t("Balances and activity open in this currency.")}
+              </p>
               <label className="field desk-currency">
                 <span>{t("Currency")}</span>
                 <CurrencySelect
                   label={t("Currency")}
                   value={user.displayCurrency ?? "USD"}
-                  options={MONEY.map((item) => ({ code: item.code, label: item.code }))}
-                  onChange={(next) => patchUser(user.id, { displayCurrency: next as MoneyCode })}
+                  options={MONEY.map((item) => ({
+                    code: item.code,
+                    label: item.code,
+                  }))}
+                  onChange={(next) =>
+                    patchUser(user.id, { displayCurrency: next as MoneyCode })
+                  }
                 />
               </label>
             </form>
@@ -303,16 +404,37 @@ function SettingsForm({ user }: { user: BankUser }) {
               <form className="stack" onSubmit={savePin}>
                 <label className="field">
                   <span>{t("Current PIN")}</span>
-                  <input type="password" inputMode="numeric" maxLength={4} value={pinCurrent} onChange={(event) => setPinCurrent(event.target.value)} autoComplete="off" />
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={4}
+                    value={pinCurrent}
+                    onChange={(event) => setPinCurrent(event.target.value)}
+                    autoComplete="off"
+                  />
                 </label>
                 <div className="split">
                   <label className="field">
                     <span>{t("New PIN")}</span>
-                    <input type="password" inputMode="numeric" maxLength={4} value={pinNext} onChange={(event) => setPinNext(event.target.value)} autoComplete="off" />
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={4}
+                      value={pinNext}
+                      onChange={(event) => setPinNext(event.target.value)}
+                      autoComplete="off"
+                    />
                   </label>
                   <label className="field">
                     <span>{t("Confirm")}</span>
-                    <input type="password" inputMode="numeric" maxLength={4} value={pinConfirm} onChange={(event) => setPinConfirm(event.target.value)} autoComplete="off" />
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={4}
+                      value={pinConfirm}
+                      onChange={(event) => setPinConfirm(event.target.value)}
+                      autoComplete="off"
+                    />
                   </label>
                 </div>
                 {pinError ? <p className="form-error">{pinError}</p> : null}
@@ -328,8 +450,16 @@ function SettingsForm({ user }: { user: BankUser }) {
                   onChange={(event) => {
                     const on = event.target.checked;
                     askChange(
-                      t(on ? "Ask for the PIN at sign-in?" : "Stop asking for the PIN at sign-in?"),
-                      t(on ? "Sign-in will ask for the transfer PIN." : "Sign-in will not ask for the transfer PIN."),
+                      t(
+                        on
+                          ? "Ask for the PIN at sign-in?"
+                          : "Stop asking for the PIN at sign-in?",
+                      ),
+                      t(
+                        on
+                          ? "Sign-in will ask for the transfer PIN."
+                          : "Sign-in will not ask for the transfer PIN.",
+                      ),
                       t(on ? "Turn on" : "Turn off"),
                       () => patchUser(user.id, { twoFactor: on }),
                     );
@@ -338,7 +468,9 @@ function SettingsForm({ user }: { user: BankUser }) {
                 {t("PIN at sign-in")}
               </label>
               <TwoFactorPanel />
-              <p className="muted">{t("Signed in as")} {user.email}</p>
+              <p className="muted">
+                {t("Signed in as")} {user.email}
+              </p>
             </div>
           ) : null}
 
@@ -353,12 +485,22 @@ function SettingsForm({ user }: { user: BankUser }) {
                       {push === "unsupported"
                         ? t("Push alerts are not available on this device.")
                         : push === "denied"
-                          ? t("Alerts are blocked. Allow them in the site settings.")
+                          ? t(
+                              "Alerts are blocked. Allow them in the site settings.",
+                            )
                           : push === "on"
-                            ? t("On. Alerts appear when money moves or an administrator sends a notice.")
-                            : t("Off. Turn on to receive alerts when money moves or an administrator sends a notice.")}
+                            ? t(
+                                "On. Alerts appear when money moves or an administrator sends a notice.",
+                              )
+                            : t(
+                                "Off. Turn on to receive alerts when money moves or an administrator sends a notice.",
+                              )}
                     </span>
-                    {pushError ? <p className="form-error" role="alert">{pushError}</p> : null}
+                    {pushError ? (
+                      <p className="form-error" role="alert">
+                        {pushError}
+                      </p>
+                    ) : null}
                   </div>
                   <button
                     type="button"
@@ -368,35 +510,44 @@ function SettingsForm({ user }: { user: BankUser }) {
                     onClick={() => {
                       const turningOff = push === "on";
                       askChange(
-                        t(turningOff ? "Turn {name} off?" : "Turn {name} on?", { name: t("Push") }),
+                        t(turningOff ? "Turn {name} off?" : "Turn {name} on?", {
+                          name: t("Push"),
+                        }),
                         t("This setting is saved on the account."),
                         t(turningOff ? "Turn off" : "Turn on"),
-                        () => void (async () => {
-                      if (turningOff) {
-                        await releaseFirebasePush(user.id);
-                        disablePush();
-                        setPush("off");
-                        setPushError("");
-                        return;
-                      }
-                      const next = await enablePush();
-                      if (next !== "on") {
-                        setPush(next);
-                        setPushError("");
-                        return;
-                      }
-                      try {
-                        await bindFirebasePush(user.id);
-                      } catch {
-                        disablePush();
-                        setPush("off");
-                        setPushError(t("Alerts could not be turned on. Try again."));
-                        return;
-                      }
-                      setPush("on");
-                      setPushError("");
-                      await showPush(t("Push is on"), t("Alerts appear when money moves."), "push-on");
-                        })(),
+                        () =>
+                          void (async () => {
+                            if (turningOff) {
+                              await releaseFirebasePush(user.id);
+                              disablePush();
+                              setPush("off");
+                              setPushError("");
+                              return;
+                            }
+                            const next = await enablePush();
+                            if (next !== "on") {
+                              setPush(next);
+                              setPushError("");
+                              return;
+                            }
+                            try {
+                              await bindFirebasePush(user.id);
+                            } catch {
+                              disablePush();
+                              setPush("off");
+                              setPushError(
+                                t("Alerts could not be turned on. Try again."),
+                              );
+                              return;
+                            }
+                            setPush("on");
+                            setPushError("");
+                            await showPush(
+                              t("Push is on"),
+                              t("Alerts appear when money moves."),
+                              "push-on",
+                            );
+                          })(),
                       );
                     }}
                   >
@@ -406,13 +557,30 @@ function SettingsForm({ user }: { user: BankUser }) {
                 <li>
                   <div>
                     <strong>{t("Money movement")}</strong>
-                    <span className="muted">{t("A notice when money arrives or leaves.")}</span>
+                    <span className="muted">
+                      {t("A notice when money arrives or leaves.")}
+                    </span>
                   </div>
                   <button
                     type="button"
                     className="btn btn-ghost btn-sm"
                     aria-pressed={alerts.transfers}
-                    onClick={() => askChange(t(alerts.transfers ? "Turn {name} off?" : "Turn {name} on?", { name: t("Money movement") }), t("This setting is saved on the account."), t(alerts.transfers ? "Turn off" : "Turn on"), () => patchUser(user.id, { alerts: { ...alerts, transfers: !alerts.transfers } }))}
+                    onClick={() =>
+                      askChange(
+                        t(
+                          alerts.transfers
+                            ? "Turn {name} off?"
+                            : "Turn {name} on?",
+                          { name: t("Money movement") },
+                        ),
+                        t("This setting is saved on the account."),
+                        t(alerts.transfers ? "Turn off" : "Turn on"),
+                        () =>
+                          patchUser(user.id, {
+                            alerts: { ...alerts, transfers: !alerts.transfers },
+                          }),
+                      )
+                    }
                   >
                     {alerts.transfers ? t("On") : t("Off")}
                   </button>
@@ -420,13 +588,30 @@ function SettingsForm({ user }: { user: BankUser }) {
                 <li>
                   <div>
                     <strong>{t("Security")}</strong>
-                    <span className="muted">{t("PIN changes and new sign-ins.")}</span>
+                    <span className="muted">
+                      {t("PIN changes and new sign-ins.")}
+                    </span>
                   </div>
                   <button
                     type="button"
                     className="btn btn-ghost btn-sm"
                     aria-pressed={alerts.security}
-                    onClick={() => askChange(t(alerts.security ? "Turn {name} off?" : "Turn {name} on?", { name: t("Security") }), t("This setting is saved on the account."), t(alerts.security ? "Turn off" : "Turn on"), () => patchUser(user.id, { alerts: { ...alerts, security: !alerts.security } }))}
+                    onClick={() =>
+                      askChange(
+                        t(
+                          alerts.security
+                            ? "Turn {name} off?"
+                            : "Turn {name} on?",
+                          { name: t("Security") },
+                        ),
+                        t("This setting is saved on the account."),
+                        t(alerts.security ? "Turn off" : "Turn on"),
+                        () =>
+                          patchUser(user.id, {
+                            alerts: { ...alerts, security: !alerts.security },
+                          }),
+                      )
+                    }
                   >
                     {alerts.security ? t("On") : t("Off")}
                   </button>
@@ -434,20 +619,42 @@ function SettingsForm({ user }: { user: BankUser }) {
                 <li>
                   <div>
                     <strong>{t("Statements")}</strong>
-                    <span className="muted">{t("A notice when a statement is ready.")}</span>
+                    <span className="muted">
+                      {t("A notice when a statement is ready.")}
+                    </span>
                   </div>
                   <button
                     type="button"
                     className="btn btn-ghost btn-sm"
                     aria-pressed={alerts.statements}
-                    onClick={() => askChange(t(alerts.statements ? "Turn {name} off?" : "Turn {name} on?", { name: t("Statements") }), t("This setting is saved on the account."), t(alerts.statements ? "Turn off" : "Turn on"), () => patchUser(user.id, { alerts: { ...alerts, statements: !alerts.statements } }))}
+                    onClick={() =>
+                      askChange(
+                        t(
+                          alerts.statements
+                            ? "Turn {name} off?"
+                            : "Turn {name} on?",
+                          { name: t("Statements") },
+                        ),
+                        t("This setting is saved on the account."),
+                        t(alerts.statements ? "Turn off" : "Turn on"),
+                        () =>
+                          patchUser(user.id, {
+                            alerts: {
+                              ...alerts,
+                              statements: !alerts.statements,
+                            },
+                          }),
+                      )
+                    }
                   >
                     {alerts.statements ? t("On") : t("Off")}
                   </button>
                 </li>
               </ul>
               <p>
-                <Link href="/dashboard/notifications">{t("Open notifications")}</Link>
+                <Link href="/dashboard/notifications">
+                  {t("Open notifications")}
+                </Link>
               </p>
             </div>
           ) : null}
@@ -459,13 +666,33 @@ function SettingsForm({ user }: { user: BankUser }) {
                 <li>
                   <div>
                     <strong>{t("Statements")}</strong>
-                    <span className="muted">{t("Print the account email on statements.")}</span>
+                    <span className="muted">
+                      {t("Print the account email on statements.")}
+                    </span>
                   </div>
                   <button
                     type="button"
                     className="btn btn-ghost btn-sm"
                     aria-pressed={privacy.statementEmail}
-                    onClick={() => askChange(t(privacy.statementEmail ? "Turn {name} off?" : "Turn {name} on?", { name: t("Statements") }), t("This setting is saved on the account."), t(privacy.statementEmail ? "Turn off" : "Turn on"), () => patchUser(user.id, { privacy: { ...privacy, statementEmail: !privacy.statementEmail } }))}
+                    onClick={() =>
+                      askChange(
+                        t(
+                          privacy.statementEmail
+                            ? "Turn {name} off?"
+                            : "Turn {name} on?",
+                          { name: t("Statements") },
+                        ),
+                        t("This setting is saved on the account."),
+                        t(privacy.statementEmail ? "Turn off" : "Turn on"),
+                        () =>
+                          patchUser(user.id, {
+                            privacy: {
+                              ...privacy,
+                              statementEmail: !privacy.statementEmail,
+                            },
+                          }),
+                      )
+                    }
                   >
                     {privacy.statementEmail ? t("On") : t("Off")}
                   </button>
@@ -473,13 +700,33 @@ function SettingsForm({ user }: { user: BankUser }) {
                 <li>
                   <div>
                     <strong>{t("Product notes")}</strong>
-                    <span className="muted">{t("Allow notes about the service on this account.")}</span>
+                    <span className="muted">
+                      {t("Allow notes about the service on this account.")}
+                    </span>
                   </div>
                   <button
                     type="button"
                     className="btn btn-ghost btn-sm"
                     aria-pressed={privacy.marketing}
-                    onClick={() => askChange(t(privacy.marketing ? "Turn {name} off?" : "Turn {name} on?", { name: t("Product notes") }), t("This setting is saved on the account."), t(privacy.marketing ? "Turn off" : "Turn on"), () => patchUser(user.id, { privacy: { ...privacy, marketing: !privacy.marketing } }))}
+                    onClick={() =>
+                      askChange(
+                        t(
+                          privacy.marketing
+                            ? "Turn {name} off?"
+                            : "Turn {name} on?",
+                          { name: t("Product notes") },
+                        ),
+                        t("This setting is saved on the account."),
+                        t(privacy.marketing ? "Turn off" : "Turn on"),
+                        () =>
+                          patchUser(user.id, {
+                            privacy: {
+                              ...privacy,
+                              marketing: !privacy.marketing,
+                            },
+                          }),
+                      )
+                    }
                   >
                     {privacy.marketing ? t("On") : t("Off")}
                   </button>
@@ -491,7 +738,9 @@ function SettingsForm({ user }: { user: BankUser }) {
                 onClick={() =>
                   askChange(
                     t("Download this profile?"),
-                    t("A file with the name, email, and phone number is saved on this device."),
+                    t(
+                      "A file with the name, email, and phone number is saved on this device.",
+                    ),
                     t("Download"),
                     downloadProfile,
                   )

@@ -24,7 +24,7 @@ export const legalPages = {
         heading: "Who may use the site",
         clauses: [
           "The site is for businesses, fintechs, and institutions, and for people those organizations authorize.",
-          "You must give a work email you are allowed to use, and information you are allowed to share.",
+          "You must give an email you are allowed to use, and information you are allowed to share.",
           "We may refuse access where the use does not fit this institution or these terms.",
         ],
       },
@@ -123,7 +123,7 @@ export const legalPages = {
         clauses: [
           "The desk keeps notices for each account. Unread notices appear at the bell.",
           "Alerts on a device are optional and depend on the permission you give that browser.",
-          "A message about these terms goes to the work email on the account, or to the email you enter on a form.",
+          "A message about these terms goes to the email on the account, or to the email you enter on a form.",
         ],
       },
       {
@@ -154,7 +154,7 @@ export const legalPages = {
         heading: "Your information",
         clauses: [
           "The privacy page describes sign-in, forms, and exchange rates on this site.",
-          "A support message is delivered to the contact address published on the site. The work email you enter is the address for the reply.",
+          "A support message is delivered to the contact address published on the site. The email you enter is the address for the reply.",
           "You may ask us to correct contact details you sent by writing to that same address.",
         ],
       },
@@ -202,7 +202,7 @@ export const legalPages = {
         heading: "Complaints",
         clauses: [
           "Write to blackworld1656749@gmail.com, call or WhatsApp +234 807 736 8595, or use the support form.",
-          "Include the institution, the work email, and what happened. We aim to answer within one business day.",
+          "Include the institution, the email, and what happened. We aim to answer within one business day.",
           "If you are not satisfied, you may take the matter to the courts named in the next section. A live agreement may add its own process.",
         ],
       },
@@ -230,7 +230,7 @@ export const legalPages = {
     sections: [
       {
         heading: "What you send",
-        body: "Partnership, sales, and support forms send the name, work email, topic, and message to the contact address published on this site.",
+        body: "Partnership, sales, and support forms send the name, email, topic, and message to the contact address published on this site.",
       },
       {
         heading: "Login",

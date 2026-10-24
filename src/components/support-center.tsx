@@ -34,7 +34,7 @@ const QUESTIONS = [
   },
   {
     q: "I cannot sign in.",
-    a: "Use the work email and password on the account.",
+    a: "Use the email and password on the account.",
   },
 ];
 

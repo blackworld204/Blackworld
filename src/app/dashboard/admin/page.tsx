@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { AdminAccount } from "@/components/admin-account";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { NoticeDialog } from "@/components/notice-dialog";
 import { toast } from "@/components/toast";
@@ -116,6 +117,8 @@ export default function AdminPage() {
   const { state, user } = useAccount();
   const { t, locale } = useI18n();
   const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [openId, setOpenId] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [askBalance, setAskBalance] = useState(false);
   const [code, setCode] = useState<MoneyCode>("USD");
@@ -138,6 +141,11 @@ export default function AdminPage() {
       (item) => !q || item.name.toLowerCase().includes(q) || item.email.toLowerCase().includes(q),
     );
   }, [state, query]);
+  const pageCount = Math.max(1, Math.ceil(rows.length / 30));
+
+  useEffect(() => {
+    setPage((value) => Math.min(Math.max(1, value), pageCount));
+  }, [pageCount]);
 
   if (!state || !user) return <div className="app-hold" />;
   if (user.role !== "admin") {
@@ -150,6 +158,7 @@ export default function AdminPage() {
     );
   }
 
+  const opened = state.users.find((item) => item.id === openId) ?? null;
   const active = state.users.filter((item) => item.status === "active").length;
   const creators = state.users.filter((item) => item.canCreate).length;
   const blocked = state.users.filter((item) => item.status === "inactive").length;
@@ -199,9 +208,6 @@ export default function AdminPage() {
   return (
     <div className="app-pad">
       <header className="admin-top">
-        <Link className="admin-back" href="/dashboard">
-          {t("Back to dashboard")}
-        </Link>
         <div className="admin-title">
           <span className="admin-mark" aria-hidden="true">
             <Mark name="shield" />
@@ -216,6 +222,37 @@ export default function AdminPage() {
         </div>
       </header>
 
+      {opened ? (
+        <AdminAccount
+          admin={user}
+          subject={opened}
+          state={state}
+          onBack={() => setOpenId(null)}
+          onCredit={() => openBalance(opened)}
+          onNotice={() => setNotice({ userIds: [opened.id], name: opened.name })}
+          onStatus={() =>
+            setAsk({
+              type: "status",
+              id: opened.id,
+              name: opened.name,
+              next: opened.status === "active" ? "inactive" : "active",
+            })
+          }
+          onAccess={() => setAsk({ type: "access", id: opened.id, name: opened.name, canCreate: !opened.canCreate })}
+          onRole={() =>
+            setAsk({
+              type: "role",
+              id: opened.id,
+              name: opened.name,
+              next: opened.role === "admin" ? "member" : "admin",
+            })
+          }
+          onRemove={() => setAsk({ type: "remove", id: opened.id, name: opened.name })}
+        />
+      ) : null}
+
+      {opened ? null : (
+      <>
       <dl className="admin-metrics">
         <div>
           <span className="admin-metric-icon" data-tone="users" aria-hidden="true"><Mark name="users" /></span>
@@ -258,7 +295,10 @@ export default function AdminPage() {
               <span className="sr-only">{t("Search")}</span>
               <input
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setPage(1);
+                }}
                 placeholder={t("Search users")}
               />
             </label>
@@ -277,10 +317,10 @@ export default function AdminPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((item) => (
-                  <tr key={item.id}>
+              {rows.slice((Math.min(page, pageCount) - 1) * 30, Math.min(page, pageCount) * 30).map((item) => (
+                  <tr key={item.id} className="admin-row" onClick={() => setOpenId(item.id)}>
                     <td>
-                      <div className="admin-user">
+                      <button type="button" className="admin-open" onClick={() => setOpenId(item.id)}>
                         <span className="admin-avatar" style={{ background: tone(item.name) }} aria-hidden="true">
                           {initials(item.name)}
                         </span>
@@ -288,7 +328,7 @@ export default function AdminPage() {
                           <strong>{item.name}</strong>
                           <span>{item.email}</span>
                         </span>
-                      </div>
+                      </button>
                     </td>
                     <td>
                       <div className="admin-balances">
@@ -315,7 +355,7 @@ export default function AdminPage() {
                         {item.canCreate ? t("Can create") : t("No access")}
                       </span>
                     </td>
-                    <td>
+                    <td onClick={(event) => event.stopPropagation()}>
                       <div className="admin-actions">
                         <button
                           type="button"
@@ -400,7 +440,38 @@ export default function AdminPage() {
             </tbody>
           </table>
         </div>
+        {rows.length > 0 ? (
+          <nav className="admin-pager" aria-label={t("User management")}>
+            <p>
+              {t("{start}–{end} of {total}", {
+                start: (Math.min(page, pageCount) - 1) * 30 + 1,
+                end: Math.min(rows.length, Math.min(page, pageCount) * 30),
+                total: rows.length,
+              })}
+            </p>
+            <div className="admin-pager-actions">
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                disabled={Math.min(page, pageCount) <= 1}
+                onClick={() => setPage((value) => Math.max(1, value - 1))}
+              >
+                {t("Previous")}
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                disabled={Math.min(page, pageCount) >= pageCount}
+                onClick={() => setPage((value) => value + 1)}
+              >
+                {t("Next")}
+              </button>
+            </div>
+          </nav>
+        ) : null}
       </section>
+      </>
+      )}
       <BalanceDialog
         subject={state.users.find((item) => item.id === editing) ?? null}
         code={code}
@@ -513,6 +584,7 @@ export default function AdminPage() {
           if (failed) toast(t(failed));
           else if (ask.type === "remove") toast(t("Member removed."));
           else if (ask.type === "role") toast(ask.next === "admin" ? t("Admin access saved.") : t("Member access saved."));
+          if (!failed && ask.type === "remove") setOpenId(null);
           setAsk(null);
         }}
       />

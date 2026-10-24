@@ -5,37 +5,17 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
-import { decideApproval, money, setApprovalLimit, when } from "@/lib/bank";
+import { decideApproval, money, when } from "@/lib/bank";
 import { postAccount } from "@/lib/flow-api";
 
 export default function ApprovalsPage() {
   const { state, user } = useAccount();
   const { t, locale } = useI18n();
-  const [limit, setLimit] = useState("");
-  const [error, setError] = useState("");
   const [ask, setAsk] = useState<{ id: string; approve: boolean; holder: string; total: string } | null>(null);
-  const [askLimit, setAskLimit] = useState(false);
 
   if (!state || !user) return <div className="app-hold" />;
   const mine = user.role === "admin" ? state.approvals : state.approvals.filter((item) => item.userId === user.id);
   const waiting = mine.filter((item) => item.status === "pending");
-  const current = user.approvalLimit ?? 10000;
-
-  function saveLimit(event: React.FormEvent) {
-    event.preventDefault();
-    const value = Number(limit);
-    if (!Number.isFinite(value) || value < 0) return setError(t("Enter an amount of zero or more."));
-    setError("");
-    setAskLimit(true);
-  }
-
-  function applyLimit() {
-    setAskLimit(false);
-    setApprovalLimit(Number(limit));
-    setLimit("");
-    setError("");
-    toast(t("Limit saved."));
-  }
 
   return (
     <div className="app-pad">
@@ -43,23 +23,9 @@ export default function ApprovalsPage() {
         <p className="kicker">{t("Approvals")}</p>
         <h1>{t("Waiting transfers")}</h1>
         <p className="lede">
-          {t("Members wait here when a transfer, including the 1% fee, is above {amount}. Admins send immediately.", {
-            amount: money(current, "USD", locale),
-          })}
+          {t("Each member waits here when a transfer, including the 1% fee, is above that account’s approval limit. Admins send immediately.")}
         </p>
       </header>
-      {user.role === "admin" ? (
-        <form className="stack" onSubmit={saveLimit}>
-          <label className="field">
-            <span>{t("Approval limit")}</span>
-            <input inputMode="decimal" placeholder={String(current)} value={limit} onChange={(event) => setLimit(event.target.value)} />
-          </label>
-          {error ? <p className="form-error">{error}</p> : null}
-          <button className="btn btn-ghost" type="submit">
-            {t("Save limit")}
-          </button>
-        </form>
-      ) : null}
       {waiting.length === 0 ? <p className="muted">{t("No transfers waiting.")}</p> : null}
       <ul className="tx-list">
         {mine.map((item) => (
@@ -137,14 +103,6 @@ export default function ApprovalsPage() {
             toast(choice.approve ? t("Approved.") : t("Declined."));
           });
         }}
-      />
-      <ConfirmDialog
-        open={askLimit}
-        title={t("Save this limit?")}
-        body={t("Members above this amount wait for approval.")}
-        confirmLabel={t("Save limit")}
-        onClose={() => setAskLimit(false)}
-        onConfirm={applyLimit}
       />
     </div>
   );

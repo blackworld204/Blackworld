@@ -55,11 +55,6 @@ export default function DashboardPage() {
           <div>
             <p className="kicker">{t("Welcome back")}</p>
             <h1>{user.name}</h1>
-            <p className="desk-role">
-              <span className={user.role === "admin" ? "admin-pill is-role" : "admin-pill"}>
-                {user.role === "admin" ? t("Admin") : t("Member")}
-              </span>
-            </p>
           </div>
           {user.role === "admin" || user.canCreate ? (
             <div className="desk-admin">

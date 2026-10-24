@@ -87,10 +87,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       );
     });
 
+  const home = access?.admin ? "/dashboard/admin" : "/dashboard";
+
   const accountLinks = () => {
+    if (access?.admin) {
+      return linkItems([
+        { href: "/dashboard/admin", label: "Admin" },
+        { href: "/dashboard/settings", label: "Notification settings" },
+      ]);
+    }
     const institution = [
       ...(access?.canCreate ? [{ href: "/dashboard/create", label: "Create account" }] : []),
-      ...(access?.admin ? [{ href: "/dashboard/team", label: "Team" }, { href: "/dashboard/admin", label: "Admin" }] : []),
       { href: "/dashboard/developers", label: "Developers" },
       { href: "/dashboard/referrals", label: "Refer and earn" },
     ];
@@ -109,15 +116,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="app">
       <aside className="app-side">
-        <Link href="/dashboard" className="brand" aria-label={t("Blackworld, dashboard")}>
+        <Link href={home} className="brand" aria-label={t("Blackworld, dashboard")}>
           <Mark />
           <span>Blackworld</span>
         </Link>
-        {access ? (
-          <p className="app-role">
-            <span className={access.admin ? "admin-pill is-role" : "admin-pill"}>{access.admin ? t("Admin") : t("Member")}</span>
-          </p>
-        ) : null}
         <nav className="app-nav" aria-label={t("Account")}>
           {accountLinks()}
         </nav>
@@ -126,7 +128,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="app-column">
       <div className="app-head">
       <header className="app-bar">
-        <Link href="/dashboard" className="brand" aria-label={t("Blackworld, dashboard")}>
+        <Link href={home} className="brand" aria-label={t("Blackworld, dashboard")}>
           <Mark />
           <span>Blackworld</span>
         </Link>
@@ -152,7 +154,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {open ? (
         <div className="menu app-menu" id="account-menu" role="dialog" aria-label={t("Menu")}>
           <div className="menu-top">
-            <Link href="/dashboard" className="brand" onClick={() => setOpen(false)}>
+            <Link href={home} className="brand" onClick={() => setOpen(false)}>
               <Mark />
               <span>Blackworld</span>
             </Link>
@@ -162,11 +164,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <nav className="menu-links" aria-label={t("Account")}>
             {session ? <p className="menu-email">{session.email}</p> : null}
-            {access ? (
-              <p className="app-role">
-                <span className={access.admin ? "admin-pill is-role" : "admin-pill"}>{access.admin ? t("Admin") : t("Member")}</span>
-              </p>
-            ) : null}
             {accountLinks()}
             <SignOutButton className="menu-signout" onDone={() => setOpen(false)} />
           </nav>

@@ -16,11 +16,21 @@ import {
 import { emptyBalances, isMoneyCode, type MoneyCode } from "@/lib/currencies";
 import { withDeskLock } from "@/lib/desk-store";
 import { quotedRateBook } from "@/lib/rate-hub";
-import { quoteConversion, roundMoney as money, type RateBook } from "@/lib/rates";
+import {
+  quoteConversion,
+  roundMoney as money,
+  type RateBook,
+} from "@/lib/rates";
 import { deliverEvents } from "@/lib/send-hook";
 import { openState, sealState } from "@/lib/vault";
 
-type Call = { method: string; path: string[]; authorization: string | null; body: unknown; sessionEmail?: string | null };
+type Call = {
+  method: string;
+  path: string[];
+  authorization: string | null;
+  body: unknown;
+  sessionEmail?: string | null;
+};
 type Reply = { status: number; body: unknown };
 
 function nid(prefix: string) {
@@ -33,7 +43,8 @@ function text(value: unknown, max: number) {
 }
 
 function sameKey(stored: string | undefined, given: string) {
-  if (!stored || stored.length !== given.length || stored.length < 16) return false;
+  if (!stored || stored.length !== given.length || stored.length < 16)
+    return false;
   return timingSafeEqual(Buffer.from(stored), Buffer.from(given));
 }
 
@@ -74,7 +85,12 @@ function publicAccount(user: BankUser, state: BankState) {
   };
 }
 
-function eventFor(userId: string, title: string, body: string, at: string): BankEvent {
+function eventFor(
+  userId: string,
+  title: string,
+  body: string,
+  at: string,
+): BankEvent {
   return { id: nid("evt"), userId, title, body, at };
 }
 
@@ -92,7 +108,10 @@ function pay(
   user: BankUser,
   input: Record<string, unknown>,
   options?: { force?: boolean },
-): { state: BankState; eventIds: string[]; value: unknown } | { error: string; status: number } | { value: unknown } {
+):
+  | { state: BankState; eventIds: string[]; value: unknown }
+  | { error: string; status: number }
+  | { value: unknown } {
   const currency = text(input.currency, 8).toUpperCase();
   const amount = typeof input.amount === "number" ? input.amount : Number.NaN;
   const holder = text(input.holder, 80);
@@ -102,17 +121,46 @@ function pay(
   const swift = text(input.swift, 16);
   const note = text(input.note, 140);
   const reference = referenceOf(input);
-  if (!isMoneyCode(currency)) return { error: "Choose a currency.", status: 422 };
-  if (!Number.isFinite(amount) || amount <= 0 || amount > 1_000_000_000) return { error: "Enter an amount.", status: 422 };
-  if (holder.length < 2 || bank.length < 2 || account.length < 4) return { error: "Enter the beneficiary.", status: 422 };
+  if (!isMoneyCode(currency))
+    return { error: "Choose a currency.", status: 422 };
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 1_000_000_000)
+    return { error: "Enter an amount.", status: 422 };
+  if (holder.length < 2 || bank.length < 2 || account.length < 4)
+    return { error: "Enter the beneficiary.", status: 422 };
   if (reference) {
-    const existing = state.txs.find((item) => item.ref === reference && item.userId === user.id && item.title === "Transfer");
+    const existing = state.txs.find(
+      (item) =>
+        item.ref === reference &&
+        item.userId === user.id &&
+        item.title === "Transfer",
+    );
     if (existing) {
-      return { value: { id: existing.id, status: "paid", amount: existing.amount, fee: transferFee(existing.amount), currency: existing.currency } };
+      return {
+        value: {
+          id: existing.id,
+          status: "paid",
+          amount: existing.amount,
+          fee: transferFee(existing.amount),
+          currency: existing.currency,
+        },
+      };
     }
-    const waiting = state.approvals.find((item) => item.ref === reference && item.userId === user.id && item.status === "pending");
+    const waiting = state.approvals.find(
+      (item) =>
+        item.ref === reference &&
+        item.userId === user.id &&
+        item.status === "pending",
+    );
     if (waiting && !options?.force) {
-      return { value: { id: waiting.id, status: "pending", amount: waiting.amount, fee: waiting.fee, currency: waiting.currency } };
+      return {
+        value: {
+          id: waiting.id,
+          status: "pending",
+          amount: waiting.amount,
+          fee: waiting.fee,
+          currency: waiting.currency,
+        },
+      };
     }
   }
   const rounded = money(currency, amount);
@@ -137,7 +185,12 @@ function pay(
     };
     const body = `${holder} · ${currency} ${rounded.toFixed(2)}`;
     const waiting = eventFor(user.id, "Approval waiting", body, at);
-    const recipients = new Set<string>([user.id, ...state.users.filter((item) => item.role === "admin").map((item) => item.id)]);
+    const recipients = new Set<string>([
+      user.id,
+      ...state.users
+        .filter((item) => item.role === "admin")
+        .map((item) => item.id),
+    ]);
     const notes: BankNote[] = [...recipients].map((userId) => ({
       id: nid("note"),
       userId,
@@ -146,8 +199,19 @@ function pay(
       at,
       read: false,
     }));
-    const next = pushEvent({ ...state, approvals: [row, ...state.approvals], notes: [...notes, ...state.notes] }, waiting);
-    return { state: next, eventIds: [waiting.id], value: { id: row.id, status: "pending", amount: rounded, fee, currency } };
+    const next = pushEvent(
+      {
+        ...state,
+        approvals: [row, ...state.approvals],
+        notes: [...notes, ...state.notes],
+      },
+      waiting,
+    );
+    return {
+      state: next,
+      eventIds: [waiting.id],
+      value: { id: row.id, status: "pending", amount: rounded, fee, currency },
+    };
   }
   const moved = debit(state, user.id, currency, rounded, {
     title: "Transfer",
@@ -157,13 +221,35 @@ function pay(
     ref: reference || undefined,
   });
   if ("error" in moved) return moved;
-  if (fee <= 0) return { state: moved.state, eventIds: [moved.eventId], value: { id: moved.eventId, status: "paid", amount: rounded, fee, currency } };
-  const charged = debit(moved.state, user.id, currency, fee, { title: "Transfer fee", detail: "1% of the transfer", amount: fee, direction: "out" });
+  if (fee <= 0)
+    return {
+      state: moved.state,
+      eventIds: [moved.eventId],
+      value: {
+        id: moved.eventId,
+        status: "paid",
+        amount: rounded,
+        fee,
+        currency,
+      },
+    };
+  const charged = debit(moved.state, user.id, currency, fee, {
+    title: "Transfer fee",
+    detail: "1% of the transfer",
+    amount: fee,
+    direction: "out",
+  });
   if ("error" in charged) return charged;
   return {
     state: charged.state,
     eventIds: [moved.eventId, charged.eventId],
-    value: { id: moved.eventId, status: "paid", amount: rounded, fee, currency },
+    value: {
+      id: moved.eventId,
+      status: "paid",
+      amount: rounded,
+      fee,
+      currency,
+    },
   };
 }
 
@@ -177,19 +263,36 @@ function debit(
   const user = state.users.find((item) => item.id === userId);
   if (!user) return { error: "Account not found.", status: 404 };
   const nextBalance = user.balances[code] - amount;
-  if (nextBalance < -0.001) return { error: "Not enough balance.", status: 422 };
+  if (nextBalance < -0.001)
+    return { error: "Not enough balance.", status: 422 };
   const at = new Date().toISOString();
   const record: BankTx = { id: nid("tx"), userId, currency: code, at, ...tx };
   const body = `−${code} ${amount.toFixed(2)}. ${tx.detail}`;
   const event = eventFor(userId, tx.title, body, at);
-  const note: BankNote = { id: nid("note"), userId, title: tx.title, body, at, read: false, channel: "transfer" };
+  const note: BankNote = {
+    id: nid("note"),
+    userId,
+    title: tx.title,
+    body,
+    at,
+    read: false,
+    channel: "transfer",
+  };
   return {
     eventId: event.id,
     state: pushEvent(
       {
         ...state,
         users: state.users.map((item) =>
-          item.id === userId ? { ...item, balances: { ...item.balances, [code]: money(code, nextBalance) } } : item,
+          item.id === userId
+            ? {
+                ...item,
+                balances: {
+                  ...item.balances,
+                  [code]: money(code, nextBalance),
+                },
+              }
+            : item,
         ),
         txs: [record, ...state.txs],
         notes: alertsOf(user).transfers ? [note, ...state.notes] : state.notes,
@@ -213,14 +316,30 @@ function credit(
   const record: BankTx = { id: nid("tx"), userId, currency: code, at, ...tx };
   const body = `+${code} ${amount.toFixed(2)}. ${tx.detail}`;
   const event = eventFor(userId, tx.title, body, at);
-  const note: BankNote = { id: nid("note"), userId, title: tx.title, body, at, read: false, channel: "transfer" };
+  const note: BankNote = {
+    id: nid("note"),
+    userId,
+    title: tx.title,
+    body,
+    at,
+    read: false,
+    channel: "transfer",
+  };
   return {
     eventId: event.id,
     state: pushEvent(
       {
         ...state,
         users: state.users.map((item) =>
-          item.id === userId ? { ...item, balances: { ...item.balances, [code]: money(code, nextBalance) } } : item,
+          item.id === userId
+            ? {
+                ...item,
+                balances: {
+                  ...item.balances,
+                  [code]: money(code, nextBalance),
+                },
+              }
+            : item,
         ),
         txs: [record, ...state.txs],
         notes: alertsOf(user).transfers ? [note, ...state.notes] : state.notes,
@@ -230,22 +349,33 @@ function credit(
   };
 }
 
-function deposit(state: BankState, user: BankUser, input: Record<string, unknown>) {
+function deposit(
+  state: BankState,
+  user: BankUser,
+  input: Record<string, unknown>,
+) {
   const amount = typeof input.amount === "number" ? input.amount : Number.NaN;
   const method = text(input.method, 8);
-  if (method !== "wire" && method !== "card") return { error: "Choose a deposit method.", status: 422 };
-  if (!Number.isFinite(amount) || amount <= 0 || amount > 1_000_000_000) return { error: "Enter an amount.", status: 422 };
+  if (method !== "wire" && method !== "card")
+    return { error: "Choose a deposit method.", status: 422 };
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 1_000_000_000)
+    return { error: "Enter an amount.", status: 422 };
   const cards = state.cards.filter((card) => card.userId === user.id);
   const chargeable = cards.filter((card) => !card.frozen);
   const card = chargeable.find((item) => item.primary) ?? chargeable[0];
   if (method === "card" && !card) {
     return {
-      error: cards.length ? "Unfreeze a card before a card deposit." : "Add a card before using a card deposit.",
+      error: cards.length
+        ? "Unfreeze a card before a card deposit."
+        : "Add a card before using a card deposit.",
       status: 422,
     };
   }
   const { fee, credit: received } = depositBreakdown(amount);
-  const detail = method === "wire" ? `Fee USD ${fee.toFixed(2)}` : `Card •••• ${card?.last4 ?? ""} · fee USD ${fee.toFixed(2)}`;
+  const detail =
+    method === "wire"
+      ? `Fee USD ${fee.toFixed(2)}`
+      : `Card •••• ${card?.last4 ?? ""} · fee USD ${fee.toFixed(2)}`;
   const moved = credit(state, user.id, "USD", received, {
     title: method === "wire" ? "Wire deposit" : "Card deposit",
     detail,
@@ -253,20 +383,34 @@ function deposit(state: BankState, user: BankUser, input: Record<string, unknown
     direction: "in",
   });
   if ("error" in moved) return moved;
-  return { state: moved.state, eventIds: [moved.eventId], value: { status: "paid", amount: received, fee, currency: "USD" } };
+  return {
+    state: moved.state,
+    eventIds: [moved.eventId],
+    value: { status: "paid", amount: received, fee, currency: "USD" },
+  };
 }
 
-function exchange(state: BankState, user: BankUser, input: Record<string, unknown>, book: RateBook) {
+function exchange(
+  state: BankState,
+  user: BankUser,
+  input: Record<string, unknown>,
+  book: RateBook,
+) {
   const from = text(input.from, 8).toUpperCase();
   const to = text(input.to, 8).toUpperCase();
   const amount = typeof input.amount === "number" ? input.amount : Number.NaN;
-  if (!isMoneyCode(from) || !isMoneyCode(to) || from === to) return { error: "Choose a currency.", status: 422 };
-  if (!Number.isFinite(amount) || amount <= 0 || amount > 1_000_000_000) return { error: "Enter an amount.", status: 422 };
+  if (!isMoneyCode(from) || !isMoneyCode(to) || from === to)
+    return { error: "Choose a currency.", status: 422 };
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 1_000_000_000)
+    return { error: "Enter an amount.", status: 422 };
   const source = book.rates.find((item) => item.code === from);
   const target = book.rates.find((item) => item.code === to);
   if (!source || !target) return { error: "Choose a currency.", status: 422 };
   const quoted = quoteConversion(amount, source, target);
-  if (!Number.isFinite(quoted.converted) || !Number.isFinite(quoted.rate)) return { error: "Rates are not available.", status: 502 };
+  if (!Number.isFinite(quoted.converted) || !Number.isFinite(quoted.rate))
+    return { error: "Rates are not available.", status: 502 };
+  const over = overCardSpend(state, user.id, from, quoted.amount);
+  if (over) return { error: over, status: 422 };
   const out = debit(state, user.id, from, quoted.amount, {
     title: "Exchange out",
     detail: `${from} to ${to} · fee ${quoted.fee.toFixed(2)}`,
@@ -284,48 +428,85 @@ function exchange(state: BankState, user: BankUser, input: Record<string, unknow
   return {
     state: inn.state,
     eventIds: [out.eventId, inn.eventId],
-    value: { from, to, amount: quoted.amount, fee: quoted.fee, converted: quoted.converted, rate: quoted.rate, status: "paid" },
+    value: {
+      from,
+      to,
+      amount: quoted.amount,
+      fee: quoted.fee,
+      converted: quoted.converted,
+      rate: quoted.rate,
+      status: "paid",
+    },
   };
 }
 
-function decide(state: BankState, actor: BankUser, approvalId: string, approve: boolean) {
-  if (actor.role !== "admin") return { error: "Only an admin can decide.", status: 403 };
+function decide(
+  state: BankState,
+  actor: BankUser,
+  approvalId: string,
+  approve: boolean,
+) {
+  if (actor.role !== "admin")
+    return { error: "Only an admin can decide.", status: 403 };
   const row = state.approvals.find((item) => item.id === approvalId);
-  if (!row || row.status !== "pending") return { error: "That transfer is no longer waiting.", status: 422 };
+  if (!row || row.status !== "pending")
+    return { error: "That transfer is no longer waiting.", status: 422 };
   if (!approve) {
     return {
       state: {
         ...state,
-        approvals: state.approvals.map((item) => (item.id === approvalId ? { ...item, status: "declined" as const } : item)),
+        approvals: state.approvals.map((item) =>
+          item.id === approvalId
+            ? { ...item, status: "declined" as const }
+            : item,
+        ),
       },
       eventIds: [] as string[],
       value: { id: row.id, status: "declined" },
     };
   }
   const payer = state.users.find((item) => item.id === row.userId);
-  if (!payer || payer.status !== "active") return { error: "Account not found.", status: 404 };
+  if (!payer || payer.status !== "active")
+    return { error: "Account not found.", status: 404 };
   const paid = pay(state, payer, { ...row }, { force: true });
   if ("error" in paid) return paid;
-  if (!("state" in paid) || !paid.state) return { value: { id: row.id, status: "approved" } };
+  if (!("state" in paid) || !paid.state)
+    return { value: { id: row.id, status: "approved" } };
   return {
     state: {
       ...paid.state,
-      approvals: paid.state.approvals.map((item) => (item.id === approvalId ? { ...item, status: "approved" as const } : item)),
+      approvals: paid.state.approvals.map((item) =>
+        item.id === approvalId
+          ? { ...item, status: "approved" as const }
+          : item,
+      ),
     },
     eventIds: paid.eventIds,
     value: { id: row.id, status: "approved" },
   };
 }
 
-function issueCard(state: BankState, user: BankUser, input: Record<string, unknown>) {
+function issueCard(
+  state: BankState,
+  user: BankUser,
+  input: Record<string, unknown>,
+) {
   const holder = text(input.holder, 80) || user.name;
   const kind = input.kind === "physical" ? "physical" : "virtual";
-  const spendLimit = typeof input.spendLimit === "number" && input.spendLimit > 0 ? money("USD", input.spendLimit) : undefined;
-  if (holder.length < 2) return { error: "Enter the name on the card.", status: 422 };
-  const used = new Set(state.cards.filter((card) => card.userId === user.id).map((card) => card.last4));
+  const spendLimit =
+    typeof input.spendLimit === "number" && input.spendLimit > 0
+      ? money("USD", input.spendLimit)
+      : undefined;
+  if (holder.length < 2)
+    return { error: "Enter the name on the card.", status: 422 };
+  const used = new Set(
+    state.cards
+      .filter((card) => card.userId === user.id)
+      .map((card) => card.last4),
+  );
   let last4 = "";
   for (let attempt = 0; attempt < 30 && !last4; attempt += 1) {
-    const next = String(randomBytes(2).readUInt16BE(0) % 9000 + 1000);
+    const next = String((randomBytes(2).readUInt16BE(0) % 9000) + 1000);
     if (!used.has(next)) last4 = next;
   }
   if (!last4) return { error: "A card could not be issued.", status: 422 };
@@ -338,30 +519,52 @@ function issueCard(state: BankState, user: BankUser, input: Record<string, unkno
     holder: holder.toUpperCase(),
     last4,
     expiry: `${String(expiryDate.getMonth() + 1).padStart(2, "0")}/${String(expiryDate.getFullYear()).slice(-2)}`,
-    primary: !state.cards.some((item) => item.userId === user.id && item.primary),
+    primary: !state.cards.some(
+      (item) => item.userId === user.id && item.primary,
+    ),
     frozen: false,
     kind,
     spendLimit,
   };
-  const event = eventFor(user.id, "Card issued", `${card.kind} · ${card.last4}`, at);
+  const event = eventFor(
+    user.id,
+    "Card issued",
+    `${card.kind} · ${card.last4}`,
+    at,
+  );
   return {
     state: pushEvent({ ...state, cards: [card, ...state.cards] }, event),
     eventIds: [event.id],
-    value: { id: card.id, last4: card.last4, expiry: card.expiry, kind: card.kind, spendLimit: card.spendLimit ?? null },
+    value: {
+      id: card.id,
+      last4: card.last4,
+      expiry: card.expiry,
+      kind: card.kind,
+      spendLimit: card.spendLimit ?? null,
+    },
   };
 }
 
-function openAccount(state: BankState, actor: BankUser, input: Record<string, unknown>) {
-  if (actor.role !== "admin" && !actor.canCreate) return { error: "This key cannot open an account.", status: 403 };
+function openAccount(
+  state: BankState,
+  actor: BankUser,
+  input: Record<string, unknown>,
+) {
+  if (actor.role !== "admin" && !actor.canCreate)
+    return { error: "This key cannot open an account.", status: 403 };
   const name = text(input.name, 80);
   const email = text(input.email, 120).toLowerCase();
   const phone = text(input.phone, 40);
   const pin = text(input.pin, 8);
   if (name.length < 2) return { error: "Enter the account name.", status: 422 };
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "Enter an email.", status: 422 };
-  if (phone.replace(/\D/g, "").length < 7) return { error: "Enter a phone number.", status: 422 };
-  if (!/^\d{4}$/.test(pin)) return { error: "Enter a 4-digit PIN.", status: 422 };
-  if (state.users.some((item) => item.email.toLowerCase() === email)) return { error: "That email already has an account.", status: 422 };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    return { error: "Enter an email.", status: 422 };
+  if (phone.replace(/\D/g, "").length < 7)
+    return { error: "Enter a phone number.", status: 422 };
+  if (!/^\d{4}$/.test(pin))
+    return { error: "Enter a 4-digit PIN.", status: 422 };
+  if (state.users.some((item) => item.email.toLowerCase() === email))
+    return { error: "That email already has an account.", status: 422 };
   const at = new Date().toISOString();
   const user: BankUser = {
     id: nid("usr"),
@@ -376,80 +579,178 @@ function openAccount(state: BankState, actor: BankUser, input: Record<string, un
     pin,
   };
   const event = eventFor(actor.id, "Account opened", `${name} · ${email}`, at);
-  const welcome: BankNote = { id: nid("note"), userId: user.id, title: "Account opened", body: "Your account is ready.", at, read: false };
+  const welcome: BankNote = {
+    id: nid("note"),
+    userId: user.id,
+    title: "Account opened",
+    body: "Your account is ready.",
+    at,
+    read: false,
+  };
   const notices: BankNote[] = state.users
     .filter((item) => item.role === "admin")
-    .map((item) => ({ id: nid("note"), userId: item.id, title: "Account opened", body: `${name} · ${email}`, at, read: false }));
-  const next = pushEvent({ ...state, users: [user, ...state.users], notes: [welcome, ...notices, ...state.notes] }, event);
-  return { state: next, eventIds: [event.id], value: { id: user.id, name, email, status: user.status } };
+    .map((item) => ({
+      id: nid("note"),
+      userId: item.id,
+      title: "Account opened",
+      body: `${name} · ${email}`,
+      at,
+      read: false,
+    }));
+  const next = pushEvent(
+    {
+      ...state,
+      users: [user, ...state.users],
+      notes: [welcome, ...notices, ...state.notes],
+    },
+    event,
+  );
+  return {
+    state: next,
+    eventIds: [event.id],
+    value: { id: user.id, name, email, status: user.status },
+  };
 }
 
 export async function runAccountCall(call: Call): Promise<Reply> {
   const key = bearer(call.authorization);
   const method = call.method.toUpperCase();
   const path = call.path.map((part) => part.toLowerCase());
-  if (!key && !call.sessionEmail) return { status: 401, body: { error: "unauthorized" } };
+  if (!key && !call.sessionEmail)
+    return { status: 401, body: { error: "unauthorized" } };
 
-  if (method === "GET" && path[0] === "fx" && path[1] === "rates" && path.length === 2) {
+  if (
+    method === "GET" &&
+    path[0] === "fx" &&
+    path[1] === "rates" &&
+    path.length === 2
+  ) {
     const allowed = await knownActor(call);
     if (allowed !== "ok") return allowedReply(allowed);
     try {
       const book = await quotedRateBook();
-      return { status: 200, body: { date: book.date, rates: book.rates.map((item) => ({ code: item.code, perUsd: item.perUsd })) } };
+      return {
+        status: 200,
+        body: {
+          date: book.date,
+          rates: book.rates.map((item) => ({
+            code: item.code,
+            perUsd: item.perUsd,
+          })),
+        },
+      };
     } catch {
       return { status: 502, body: { error: "Rates are not available." } };
     }
   }
 
-  if (method === "POST" && path[0] === "fx" && path[1] === "quotes" && path.length === 2) {
+  if (
+    method === "POST" &&
+    path[0] === "fx" &&
+    path[1] === "quotes" &&
+    path.length === 2
+  ) {
     const allowed = await knownActor(call);
     if (allowed !== "ok") return allowedReply(allowed);
     const record = recordOf(call.body);
     const from = text(record?.from, 8).toUpperCase();
     const to = text(record?.to, 8).toUpperCase();
-    const amount = typeof record?.amount === "number" ? record.amount : Number.NaN;
-    if (!isMoneyCode(from) || !isMoneyCode(to)) return { status: 422, body: { error: "Choose a currency." } };
-    if (!Number.isFinite(amount) || amount <= 0) return { status: 422, body: { error: "Enter an amount." } };
+    const amount =
+      typeof record?.amount === "number" ? record.amount : Number.NaN;
+    if (!isMoneyCode(from) || !isMoneyCode(to))
+      return { status: 422, body: { error: "Choose a currency." } };
+    if (!Number.isFinite(amount) || amount <= 0)
+      return { status: 422, body: { error: "Enter an amount." } };
     try {
       const book = await quotedRateBook();
       const source = book.rates.find((item) => item.code === from);
       const target = book.rates.find((item) => item.code === to);
-      if (!source || !target) return { status: 422, body: { error: "Choose a currency." } };
+      if (!source || !target)
+        return { status: 422, body: { error: "Choose a currency." } };
       const quoted = quoteConversion(amount, source, target);
-      if (!Number.isFinite(quoted.converted) || !Number.isFinite(quoted.rate)) return { status: 502, body: { error: "Rates are not available." } };
-      return { status: 200, body: { ...quoted, expires: new Date(Date.now() + 30_000).toISOString() } };
+      if (!Number.isFinite(quoted.converted) || !Number.isFinite(quoted.rate))
+        return { status: 502, body: { error: "Rates are not available." } };
+      return {
+        status: 200,
+        body: {
+          ...quoted,
+          expires: new Date(Date.now() + 30_000).toISOString(),
+        },
+      };
     } catch {
       return { status: 502, body: { error: "Rates are not available." } };
     }
   }
 
   let exchangeBook: RateBook | null = null;
-  if (method === "POST" && path[0] === "fx" && path[1] === "exchanges" && path.length === 2) {
+  if (
+    method === "POST" &&
+    path[0] === "fx" &&
+    path[1] === "exchanges" &&
+    path.length === 2
+  ) {
     const allowed = await knownActor(call);
     if (allowed !== "ok") return allowedReply(allowed);
     exchangeBook = await quotedRateBook().catch(() => null);
-    if (!exchangeBook) return { status: 502, body: { error: "Rates are not available." } };
+    if (!exchangeBook)
+      return { status: 502, body: { error: "Rates are not available." } };
   }
 
   return withDeskLock(async (current) => {
-    if (!current) return { file: null, value: { status: 503, body: { error: "The desk is not ready." } } };
+    if (!current)
+      return {
+        file: null,
+        value: { status: 503, body: { error: "The desk is not ready." } },
+      };
     let plain: BankState;
     try {
       plain = normalizeBank(openState(current.state));
     } catch {
-      return { file: null, value: { status: 503, body: { error: "The desk is not ready." } } };
+      return {
+        file: null,
+        value: { status: 503, body: { error: "The desk is not ready." } },
+      };
     }
     const user = call.sessionEmail
-      ? plain.users.find((item) => item.email.toLowerCase() === call.sessionEmail!.toLowerCase())
+      ? plain.users.find(
+          (item) =>
+            item.email.toLowerCase() === call.sessionEmail!.toLowerCase(),
+        )
       : plain.users.find((item) => sameKey(item.apiKey, key));
-    if (!user) return { file: null, value: { status: 401, body: { error: "unauthorized" } } };
-    if (user.status !== "active") return { file: null, value: { status: 403, body: { error: "This account is inactive." } } };
+    if (!user)
+      return {
+        file: null,
+        value: { status: 401, body: { error: "unauthorized" } },
+      };
+    if (user.status !== "active")
+      return {
+        file: null,
+        value: { status: 403, body: { error: "This account is inactive." } },
+      };
 
-    const done = async (result: { state?: BankState; eventIds?: string[]; value: unknown; status?: number } | { error: string; status: number }) => {
-      if ("error" in result) return { file: null, value: { status: result.status, body: { error: result.error } } };
-      if (!result.state) return { file: null, value: { status: result.status ?? 200, body: result.value } };
+    const done = async (
+      result:
+        | {
+            state?: BankState;
+            eventIds?: string[];
+            value: unknown;
+            status?: number;
+          }
+        | { error: string; status: number },
+    ) => {
+      if ("error" in result)
+        return {
+          file: null,
+          value: { status: result.status, body: { error: result.error } },
+        };
+      if (!result.state)
+        return {
+          file: null,
+          value: { status: result.status ?? 200, body: result.value },
+        };
       const sealed = sealState(result.state);
-      if (result.eventIds?.length) await deliverEvents(result.state, result.eventIds).catch(() => 0);
+      if (result.eventIds?.length)
+        await deliverEvents(result.state, result.eventIds).catch(() => 0);
       return {
         file: { revision: current.revision + 1, state: sealed },
         value: { status: result.status ?? 200, body: result.value },
@@ -461,7 +762,8 @@ export async function runAccountCall(call: Call): Promise<Reply> {
     }
     if (method === "GET" && path[0] === "accounts" && path.length === 2) {
       const found = plain.users.find((item) => item.id === call.path[1]);
-      if (!found || (found.id !== user.id && user.role !== "admin")) return done({ error: "Account not found.", status: 404 });
+      if (!found || (found.id !== user.id && user.role !== "admin"))
+        return done({ error: "Account not found.", status: 404 });
       return done({ value: publicAccount(found, plain) });
     }
     if (method === "POST" && path[0] === "accounts" && path.length === 1) {
@@ -477,9 +779,17 @@ export async function runAccountCall(call: Call): Promise<Reply> {
     if (method === "POST" && path[0] === "payments" && path.length === 1) {
       return done(pay(plain, user, recordOf(call.body) ?? {}));
     }
-    if (method === "POST" && path[0] === "payments" && path[1] === "batch" && path.length === 2) {
-      const rows = Array.isArray((recordOf(call.body) ?? {}).payments) ? ((recordOf(call.body) as { payments: unknown[] }).payments) : null;
-      if (!rows || rows.length === 0 || rows.length > 20) return done({ error: "Enter the payments.", status: 422 });
+    if (
+      method === "POST" &&
+      path[0] === "payments" &&
+      path[1] === "batch" &&
+      path.length === 2
+    ) {
+      const rows = Array.isArray((recordOf(call.body) ?? {}).payments)
+        ? (recordOf(call.body) as { payments: unknown[] }).payments
+        : null;
+      if (!rows || rows.length === 0 || rows.length > 20)
+        return done({ error: "Enter the payments.", status: 422 });
       let cursor = plain;
       const eventIds: string[] = [];
       const results: unknown[] = [];
@@ -495,19 +805,40 @@ export async function runAccountCall(call: Call): Promise<Reply> {
       return done({
         state: cursor,
         eventIds,
-        value: { payments: results, balances: cursor.users.find((item) => item.id === user.id)?.balances },
+        value: {
+          payments: results,
+          balances: cursor.users.find((item) => item.id === user.id)?.balances,
+        },
       });
     }
     if (method === "POST" && path[0] === "deposits" && path.length === 1) {
       return done(deposit(plain, user, recordOf(call.body) ?? {}));
     }
-    if (method === "POST" && path[0] === "fx" && path[1] === "exchanges" && path.length === 2) {
-      if (!exchangeBook) return done({ error: "Rates are not available.", status: 502 });
-      return done(exchange(plain, user, recordOf(call.body) ?? {}, exchangeBook));
+    if (
+      method === "POST" &&
+      path[0] === "fx" &&
+      path[1] === "exchanges" &&
+      path.length === 2
+    ) {
+      if (!exchangeBook)
+        return done({ error: "Rates are not available.", status: 502 });
+      return done(
+        exchange(plain, user, recordOf(call.body) ?? {}, exchangeBook),
+      );
+    }
+    if (
+      method === "POST" &&
+      path[0] === "schedules" &&
+      path[1] === "run" &&
+      path.length === 2
+    ) {
+      return done(runDueSchedules(plain));
     }
     if (method === "POST" && path[0] === "approvals" && path.length === 2) {
       const record = recordOf(call.body) ?? {};
-      return done(decide(plain, user, call.path[1] ?? "", record.approve === true));
+      return done(
+        decide(plain, user, call.path[1] ?? "", record.approve === true),
+      );
     }
     return done({ error: "Not found.", status: 404 });
   });
@@ -524,9 +855,20 @@ async function knownActor(call: Call) {
     try {
       const plain = normalizeBank(openState(current.state));
       const user = call.sessionEmail
-        ? plain.users.find((item) => item.email.toLowerCase() === call.sessionEmail!.toLowerCase() && item.status === "active")
-        : plain.users.find((item) => sameKey(item.apiKey, bearer(call.authorization)) && item.status === "active");
-      return { file: null, value: user ? ("ok" as const) : ("denied" as const) };
+        ? plain.users.find(
+            (item) =>
+              item.email.toLowerCase() === call.sessionEmail!.toLowerCase() &&
+              item.status === "active",
+          )
+        : plain.users.find(
+            (item) =>
+              sameKey(item.apiKey, bearer(call.authorization)) &&
+              item.status === "active",
+          );
+      return {
+        file: null,
+        value: user ? ("ok" as const) : ("denied" as const),
+      };
     } catch {
       return { file: null, value: "missing" as const };
     }
@@ -535,6 +877,7 @@ async function knownActor(call: Call) {
 
 function allowedReply(result: "ok" | "missing" | "denied"): Reply {
   if (result === "ok") return { status: 200, body: {} };
-  if (result === "missing") return { status: 503, body: { error: "The desk is not ready." } };
+  if (result === "missing")
+    return { status: 503, body: { error: "The desk is not ready." } };
   return { status: 401, body: { error: "unauthorized" } };
 }

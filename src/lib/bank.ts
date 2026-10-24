@@ -715,15 +715,22 @@ export function setAccountRole(actorId: string, userId: string, role: "admin" | 
 export function adjustBalance(actorId: string, userId: string, code: MoneyCode, nextAmount: number) {
   const state = loadBank();
   if (!actingAdmin(state, actorId)) return "Only an admin can change a balance.";
-  if (!state.users.some((user) => user.id === userId)) return "Account not found.";
-  saveBank({
-    ...state,
-    users: state.users.map((user) =>
-      user.id === userId
-        ? { ...user, balances: { ...user.balances, [code]: Math.max(0, nextAmount) } }
-        : user,
-    ),
+  const user = state.users.find((item) => item.id === userId);
+  if (!user) return "Account not found.";
+  const digits = code === "JPY" ? 0 : 2;
+  const factor = 10 ** digits;
+  const next = Math.round(Math.max(0, nextAmount) * factor) / factor;
+  const current = Math.round(user.balances[code] * factor) / factor;
+  const delta = Math.round((next - current) * factor) / factor;
+  if (delta === 0) return null;
+  const result = applyMove(state, userId, code, delta, {
+    title: delta > 0 ? "Account credit" : "Account debit",
+    detail: "Adjusted by an administrator",
+    amount: Math.abs(delta),
+    direction: delta > 0 ? "in" : "out",
   });
+  if (result.error) return result.error;
+  saveBank(result.state);
   return null;
 }
 
@@ -956,13 +963,15 @@ export async function addSchedule(input: Omit<BankSchedule, "id" | "status">): P
   return loadBank().schedules.find((item) => item.id === row.id)?.status ?? "scheduled";
 }
 
-export function setApprovalLimit(amount: number) {
+export function setApprovalLimit(userId: string, amount: number) {
   const state = loadBank();
   const next = Math.round(Math.max(0, amount) * 100) / 100;
+  if (!state.users.some((user) => user.id === userId)) return "Account not found.";
   saveBank({
     ...state,
-    users: state.users.map((user) => ({ ...user, approvalLimit: next })),
+    users: state.users.map((user) => (user.id === userId ? { ...user, approvalLimit: next } : user)),
   });
+  return null;
 }
 
 export function cancelSchedule(scheduleId: string) {
@@ -1093,6 +1102,23 @@ export function removeMember(actorId: string, memberId: string) {
   return null;
 }
 
+export function cardSpendAmount(raw: string): { error: string } | { amount: number | null } {
+  const trimmed = raw.trim();
+  if (!trimmed) return { amount: null };
+  const value = Number(trimmed);
+  if (!Number.isFinite(value) || value <= 0) return { error: "Enter a spend limit, or leave it blank." };
+  return { amount: Math.round(value * 100) / 100 };
+}
+
+export function cardDraftError(input: { holder: string; last4: string; expiry: string }) {
+  if (input.holder.trim().length < 2) return "Enter the name on the card.";
+  if (!/^\d{4}$/.test(input.last4)) return "Enter the last 4 digits.";
+  if (!/^\d{2}\/\d{2}$/.test(input.expiry)) return "Use expiry as MM/YY.";
+  const month = Number(input.expiry.slice(0, 2));
+  if (month < 1 || month > 12) return "Use expiry as MM/YY.";
+  return null;
+}
+
 export function addCard(input: Omit<BankCard, "id">) {
   const state = loadBank();
   const card: BankCard = { ...input, id: id("card") };
@@ -1102,6 +1128,40 @@ export function addCard(input: Omit<BankCard, "id">) {
       )
     : state.cards;
   saveBank({ ...state, cards: [card, ...cards] });
+}
+
+export function updateCard(
+  userId: string,
+  cardId: string,
+  patch: {
+    holder: string;
+    last4: string;
+    expiry: string;
+    kind: "virtual" | "physical";
+    primary: boolean;
+    spendLimit: number | null;
+  },
+) {
+  const state = loadBank();
+  const current = state.cards.find((card) => card.id === cardId && card.userId === userId);
+  if (!current) return "Card not found.";
+  const others = state.cards.filter((card) => card.userId === userId && card.id !== cardId);
+  const primary = patch.primary || !others.some((card) => card.primary);
+  const cards = state.cards.map((card) => {
+    if (card.userId === userId && card.id !== cardId && primary) return { ...card, primary: false };
+    if (card.id !== cardId) return card;
+    return {
+      ...card,
+      holder: patch.holder.trim().toUpperCase(),
+      last4: patch.last4,
+      expiry: patch.expiry,
+      kind: patch.kind,
+      primary,
+      spendLimit: patch.spendLimit === null ? undefined : patch.spendLimit,
+    };
+  });
+  saveBank({ ...state, cards });
+  return null;
 }
 
 export function removeCard(userId: string, cardId: string) {

@@ -6,7 +6,13 @@ import { DateSelect } from "@/components/date-select";
 import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
-import { addCard, removeCard, setCardFrozen } from "@/lib/bank";
+import {
+  addCard,
+  cardDraftError,
+  removeCard,
+  setCardFrozen,
+  updateCard,
+} from "@/lib/bank";
 import { cardFaceClass } from "@/lib/card-look";
 
 export default function CardsPage() {
@@ -17,41 +23,63 @@ export default function CardsPage() {
   const [last4, setLast4] = useState("");
   const [expiry, setExpiry] = useState("");
   const [kind, setKind] = useState<"virtual" | "physical">("virtual");
+  const [primary, setPrimary] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const [ask, setAsk] = useState<{ id: string; last4: string; frozen: boolean; remove: boolean } | null>(null);
-  const [askAdd, setAskAdd] = useState(false);
+  const [ask, setAsk] = useState<{
+    id: string;
+    last4: string;
+    frozen: boolean;
+    remove: boolean;
+  } | null>(null);
+  const [askSave, setAskSave] = useState(false);
 
   if (!state || !user) return <div className="app-hold" />;
   const cards = state.cards.filter((card) => card.userId === user.id);
 
-  function submit(event: React.FormEvent) {
-    event.preventDefault();
-    if (holder.trim().length < 2) return setError(t("Enter the name on the card."));
-    if (!/^\d{4}$/.test(last4)) return setError(t("Enter the last 4 digits."));
-    if (!/^\d{2}\/\d{2}$/.test(expiry)) return setError(t("Use expiry as MM/YY."));
-    const month = Number(expiry.slice(0, 2));
-    if (month < 1 || month > 12) return setError(t("Use expiry as MM/YY."));
-    setError("");
-    setAskAdd(true);
-  }
-
-  function add() {
-    if (!user) return;
-    setAskAdd(false);
-    addCard({
-      userId: user!.id,
-      holder: holder.trim().toUpperCase(),
-      last4,
-      expiry,
-      primary: cards.length === 0,
-      kind,
-    });
+  function resetForm() {
+    setEditId(null);
     setHolder("");
     setLast4("");
     setExpiry("");
     setKind("virtual");
+    setPrimary(false);
     setError("");
-    toast(t("Card added."));
+  }
+
+  function submit(event: React.FormEvent) {
+    event.preventDefault();
+    const failed = cardDraftError({ holder, last4, expiry });
+    if (failed) return setError(t(failed));
+    setError("");
+    setAskSave(true);
+  }
+
+  function save() {
+    if (!user) return;
+    setAskSave(false);
+    if (editId) {
+      const failed = updateCard(user.id, editId, {
+        holder,
+        last4,
+        expiry,
+        kind,
+        primary,
+      });
+      if (failed) return toast(t(failed));
+      toast(t("Card updated."));
+    } else {
+      addCard({
+        userId: user.id,
+        holder: holder.trim().toUpperCase(),
+        last4,
+        expiry,
+        primary: primary || cards.length === 0,
+        kind,
+      });
+      toast(t("Card added."));
+    }
+    resetForm();
   }
 
   return (
@@ -61,7 +89,9 @@ export default function CardsPage() {
         <h1>{t("Linked cards")}</h1>
         <p className="lede">{t("Cards on this account.")}</p>
       </header>
-      {cards.length === 0 ? <p className="muted">{t("No cards yet.")}</p> : null}
+      {cards.length === 0 ? (
+        <p className="muted">{t("No cards yet.")}</p>
+      ) : null}
       <div className="card-grid">
         {cards.map((card) => {
           const shown = open === card.id;
@@ -79,20 +109,53 @@ export default function CardsPage() {
                 </p>
               </div>
               <div className="user-actions">
-                <button type="button" className="text-button" onClick={() => setOpen(shown ? null : card.id)}>
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => setOpen(shown ? null : card.id)}
+                >
                   {shown ? t("Hide") : t("View details")}
                 </button>
                 <button
                   type="button"
                   className="text-button"
-                  onClick={() => setAsk({ id: card.id, last4: card.last4, frozen: Boolean(card.frozen), remove: false })}
+                  onClick={() => {
+                    setEditId(card.id);
+                    setHolder(card.holder);
+                    setLast4(card.last4);
+                    setExpiry(card.expiry);
+                    setKind(card.kind === "physical" ? "physical" : "virtual");
+                    setPrimary(card.primary);
+                    setError("");
+                  }}
+                >
+                  {t("Edit")}
+                </button>
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() =>
+                    setAsk({
+                      id: card.id,
+                      last4: card.last4,
+                      frozen: Boolean(card.frozen),
+                      remove: false,
+                    })
+                  }
                 >
                   {card.frozen ? t("Unfreeze") : t("Freeze")}
                 </button>
                 <button
                   type="button"
                   className="text-button"
-                  onClick={() => setAsk({ id: card.id, last4: card.last4, frozen: Boolean(card.frozen), remove: true })}
+                  onClick={() =>
+                    setAsk({
+                      id: card.id,
+                      last4: card.last4,
+                      frozen: Boolean(card.frozen),
+                      remove: true,
+                    })
+                  }
                 >
                   {t("Remove")}
                 </button>
@@ -102,15 +165,23 @@ export default function CardsPage() {
         })}
       </div>
       <form className="stack" onSubmit={submit}>
-        <h2>{t("Add a card")}</h2>
+        <h2>{editId ? t("Edit card") : t("Add a card")}</h2>
         <label className="field">
           <span>{t("Name on card")}</span>
-          <input value={holder} onChange={(event) => setHolder(event.target.value)} />
+          <input
+            value={holder}
+            onChange={(event) => setHolder(event.target.value)}
+          />
         </label>
         <div className="split">
           <label className="field">
             <span>{t("Last 4")}</span>
-            <input inputMode="numeric" maxLength={4} value={last4} onChange={(event) => setLast4(event.target.value)} />
+            <input
+              inputMode="numeric"
+              maxLength={4}
+              value={last4}
+              onChange={(event) => setLast4(event.target.value)}
+            />
           </label>
           <label className="field">
             <span>{t("Expiry")}</span>
@@ -135,10 +206,25 @@ export default function CardsPage() {
             </button>
           ))}
         </div>
+        <label className="choice-line">
+          <input
+            type="checkbox"
+            checked={primary || (!editId && cards.length === 0)}
+            onChange={(event) => setPrimary(event.target.checked)}
+          />
+          <span>{t("Primary")}</span>
+        </label>
         {error ? <p className="form-error">{error}</p> : null}
-        <button className="btn btn-primary" type="submit">
-          {t("Add card")}
-        </button>
+        <div className="form-row">
+          <button className="btn btn-primary" type="submit">
+            {editId ? t("Save card") : t("Add card")}
+          </button>
+          {editId ? (
+            <button className="btn btn-ghost" type="button" onClick={resetForm}>
+              {t("Cancel")}
+            </button>
+          ) : null}
+        </div>
       </form>
       <ConfirmDialog
         open={ask !== null}
@@ -151,12 +237,21 @@ export default function CardsPage() {
         }
         body={
           ask?.remove
-            ? t("The card ending {last4} leaves this account.", { last4: ask.last4 })
+            ? t("The card ending {last4} leaves this account.", {
+                last4: ask.last4,
+              })
             : ask?.frozen
-              ? t("Card deposits can use the card ending {last4} again.", { last4: ask.last4 })
-              : t("Card deposits stop until you unfreeze the card ending {last4}.", { last4: ask?.last4 ?? "" })
+              ? t("Card deposits can use the card ending {last4} again.", {
+                  last4: ask.last4,
+                })
+              : t(
+                  "Card deposits stop until you unfreeze the card ending {last4}.",
+                  { last4: ask?.last4 ?? "" },
+                )
         }
-        confirmLabel={ask?.remove ? t("Remove") : ask?.frozen ? t("Unfreeze") : t("Freeze")}
+        confirmLabel={
+          ask?.remove ? t("Remove") : ask?.frozen ? t("Unfreeze") : t("Freeze")
+        }
         onClose={() => setAsk(null)}
         onConfirm={() => {
           if (!ask) return;
@@ -171,12 +266,16 @@ export default function CardsPage() {
         }}
       />
       <ConfirmDialog
-        open={askAdd}
-        title={t("Add this card?")}
-        body={t("The card ending {last4} is added to this account.", { last4 })}
-        confirmLabel={t("Add card")}
-        onClose={() => setAskAdd(false)}
-        onConfirm={add}
+        open={askSave}
+        title={editId ? t("Edit this card?") : t("Add this card?")}
+        body={
+          editId
+            ? t("The card ending {last4} is updated.", { last4 })
+            : t("The card ending {last4} is added to this account.", { last4 })
+        }
+        confirmLabel={editId ? t("Save card") : t("Add card")}
+        onClose={() => setAskSave(false)}
+        onConfirm={save}
       />
     </div>
   );

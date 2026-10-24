@@ -84,7 +84,7 @@ export function LoginForm() {
             event.preventDefault();
             if (busy) return;
             if (!validEmail(email)) {
-              setError(t("Enter a work email."));
+              setError(t("Enter an email."));
               return;
             }
             if (password.length < 8) {
@@ -137,7 +137,7 @@ export function LoginForm() {
           }}
         >
           <label className="field">
-            <span>{t("Work email")}</span>
+            <span>{t("Email")}</span>
             <input
               type="email"
               autoComplete="username"
