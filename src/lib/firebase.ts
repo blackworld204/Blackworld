@@ -12,7 +12,17 @@ export type FirebaseWebConfig = {
   measurementId?: string;
 };
 
+let runtimeConfig: FirebaseWebConfig | null = null;
+let loadingConfig: Promise<FirebaseWebConfig | null> | null = null;
+
+function isWebConfig(value: unknown): value is FirebaseWebConfig {
+  if (!value || typeof value !== "object") return false;
+  const row = value as FirebaseWebConfig;
+  return Boolean(row.apiKey && row.authDomain && row.projectId && row.appId);
+}
+
 export function firebaseWebConfig(): FirebaseWebConfig | null {
+  if (runtimeConfig) return runtimeConfig;
   const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
   const authDomain = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN;
   const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
@@ -27,6 +37,38 @@ export function firebaseWebConfig(): FirebaseWebConfig | null {
     messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || undefined,
     measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || undefined,
   };
+}
+
+/** Loads the web config from the server when the built page does not contain it. */
+export function ensureFirebaseConfig() {
+  const ready = firebaseWebConfig();
+  if (ready) return Promise.resolve(ready);
+  if (typeof window === "undefined") return Promise.resolve(null);
+  if (!loadingConfig) {
+    loadingConfig = fetch("/api/firebase-config", { cache: "no-store" })
+      .then((res) => (res.ok ? res.text() : ""))
+      .then((text) => {
+        const start = text.indexOf("=");
+        const end = text.lastIndexOf(";");
+        if (start < 0 || end <= start) return null;
+        const parsed = JSON.parse(text.slice(start + 1, end)) as unknown;
+        if (!isWebConfig(parsed)) {
+          loadingConfig = null;
+          return null;
+        }
+        runtimeConfig = parsed;
+        return parsed;
+      })
+      .catch(() => {
+        loadingConfig = null;
+        return null;
+      });
+  }
+  return loadingConfig;
+}
+
+export function ensureFirebaseAuth() {
+  return ensureFirebaseConfig().then(() => firebaseAuth());
 }
 
 export function firebaseApp(): FirebaseApp | null {

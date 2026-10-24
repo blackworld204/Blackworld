@@ -14,7 +14,7 @@ import {
   useState,
 } from "react";
 import { expectDeskSync } from "@/lib/desk-sync";
-import { firebaseAuth } from "@/lib/firebase";
+import { ensureFirebaseAuth, firebaseAuth } from "@/lib/firebase";
 
 export type Session = { email: string };
 
@@ -39,7 +39,8 @@ export function authErrorMessage(error: unknown) {
   if (code === "auth/user-disabled") return "This account is inactive.";
   if (code === "auth/operation-not-allowed") return "Email sign-in is not available.";
   if (code === "auth/network-request-failed" || code === "auth/internal-error") return "The sign-in service could not be reached.";
-  if (code === "auth/invalid-api-key" || code === "auth/api-key-not-valid") return "Sign-in is not available right now.";
+  if (code === "auth/invalid-api-key" || code.startsWith("auth/api-key-not-valid")) return "Sign-in is not available right now.";
+  if (code === "auth/unauthorized-domain") return "This site is not allowed to sign in yet.";
   if (error instanceof Error && error.message && !/Firebase|auth\//.test(error.message)) return error.message;
   return "Sign-in did not complete.";
 }
@@ -49,15 +50,24 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const auth = firebaseAuth();
-    if (!auth) {
-      setReady(true);
-      return;
-    }
-    return onAuthStateChanged(auth, (user) => {
-      setSession(user?.email ? { email: user.email } : null);
-      setReady(true);
+    let stop = false;
+    let unsub = () => {};
+    void ensureFirebaseAuth().then((auth) => {
+      if (stop) return;
+      if (!auth) {
+        setReady(true);
+        return;
+      }
+      unsub = onAuthStateChanged(auth, (user) => {
+        if (stop) return;
+        setSession(user?.email ? { email: user.email } : null);
+        setReady(true);
+      });
     });
+    return () => {
+      stop = true;
+      unsub();
+    };
   }, []);
 
   const value = useMemo<SessionValue>(
@@ -65,13 +75,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       session,
       ready,
       signIn: async (email: string, password: string) => {
-        const auth = firebaseAuth();
+        const auth = await ensureFirebaseAuth();
         if (!auth) throw new Error("Sign-in is not available right now.");
         expectDeskSync();
         await signInWithEmailAndPassword(auth, email.trim(), password);
       },
       signUp: async (email: string, password: string) => {
-        const auth = firebaseAuth();
+        const auth = await ensureFirebaseAuth();
         if (!auth) throw new Error("Sign-in is not available right now.");
         expectDeskSync();
         await createUserWithEmailAndPassword(auth, email.trim(), password);
