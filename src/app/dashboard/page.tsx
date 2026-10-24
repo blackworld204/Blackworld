@@ -7,6 +7,7 @@ import { CurrencySelect } from "@/components/currency-select";
 import { Glyph } from "@/components/glyph";
 import { ReferralPanel } from "@/components/referral-panel";
 import { toast } from "@/components/toast";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
 import { MONEY, goalOf, money, patchUser, setGoal, when, type MoneyCode } from "@/lib/bank";
@@ -304,6 +305,7 @@ function GoalField({
   const { t } = useI18n();
   const [draft, setDraft] = useState(String(value));
   const [error, setError] = useState("");
+  const [ask, setAsk] = useState(false);
 
   return (
     <form
@@ -316,7 +318,7 @@ function GoalField({
           return;
         }
         setError("");
-        onSave(amount);
+        setAsk(true);
       }}
     >
       <label className="field">
@@ -327,6 +329,17 @@ function GoalField({
         {t("Save")}
       </button>
       {error ? <p className="form-error">{error}</p> : null}
+      <ConfirmDialog
+        open={ask}
+        title={t("Save this target?")}
+        body={t("The goal is saved on this account.")}
+        confirmLabel={t("Save")}
+        onClose={() => setAsk(false)}
+        onConfirm={() => {
+          setAsk(false);
+          onSave(Number(draft));
+        }}
+      />
     </form>
   );
 }

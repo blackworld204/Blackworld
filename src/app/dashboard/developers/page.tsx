@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
@@ -13,6 +13,13 @@ export default function DevelopersPage() {
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
   const [askRotate, setAskRotate] = useState(false);
+  const [askCreate, setAskCreate] = useState(false);
+  const [askUrl, setAskUrl] = useState(false);
+  const [base, setBase] = useState("");
+
+  useEffect(() => {
+    setBase(`${window.location.origin}/api/v1`);
+  }, []);
 
   if (!state || !user) return <div className="app-hold" />;
   const events = state.events.filter((item) => item.userId === user.id);
@@ -31,7 +38,14 @@ export default function DevelopersPage() {
     event.preventDefault();
     const next = url.trim();
     if (next && !/^https:\/\/.+/i.test(next)) return setError(t("Enter an https URL."));
-    patchUser(user!.id, { webhookUrl: next });
+    setError("");
+    setAskUrl(true);
+  }
+
+  function applyUrl() {
+    if (!user) return;
+    setAskUrl(false);
+    patchUser(user.id, { webhookUrl: url.trim() });
     setUrl("");
     setError("");
     toast(t("URL saved."));
@@ -46,6 +60,8 @@ export default function DevelopersPage() {
       </header>
       <section className="stack">
         <h2>{t("API key")}</h2>
+        <p className="muted">{t("The key can call the account.")}</p>
+        {base ? <p className="mono">{base}</p> : null}
         <p className="mono">{user.apiKey ?? t("No key yet.")}</p>
         <div className="form-row">
           <button
@@ -56,8 +72,7 @@ export default function DevelopersPage() {
                 setAskRotate(true);
                 return;
               }
-              issueApiKey(user.id);
-              toast(t("Key created."));
+              setAskCreate(true);
             }}
           >
             {user.apiKey ? t("Rotate key") : t("Create key")}
@@ -106,6 +121,26 @@ export default function DevelopersPage() {
           setAskRotate(false);
           toast(t("Key rotated."));
         }}
+      />
+      <ConfirmDialog
+        open={askCreate}
+        title={t("Create an API key?")}
+        body={t("The key can call the account.")}
+        confirmLabel={t("Create key")}
+        onClose={() => setAskCreate(false)}
+        onConfirm={() => {
+          issueApiKey(user.id);
+          setAskCreate(false);
+          toast(t("Key created."));
+        }}
+      />
+      <ConfirmDialog
+        open={askUrl}
+        title={t("Save this webhook?")}
+        body={t("Events are sent to this address.")}
+        confirmLabel={t("Save URL")}
+        onClose={() => setAskUrl(false)}
+        onConfirm={applyUrl}
       />
     </div>
   );

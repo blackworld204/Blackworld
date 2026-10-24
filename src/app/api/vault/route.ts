@@ -1,24 +1,15 @@
 import { timingSafeEqual } from "node:crypto";
-import type { BankState } from "@/lib/bank";
+import { normalizeBank, type BankState } from "@/lib/bank";
+import { writePlainDesk } from "@/lib/desk-store";
+import { sameOrigin, signedIn } from "@/lib/request-guard";
 import { isSealed } from "@/lib/sealed";
 import { verifyTotp } from "@/lib/totp";
-import { openState, openText, sealState, vaultReady } from "@/lib/vault";
+import { openState, openText, vaultReady } from "@/lib/vault";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const hits = new Map<string, number[]>();
-
-function sameOrigin(request: Request) {
-  const origin = request.headers.get("origin");
-  const host = request.headers.get("host");
-  if (!origin || !host) return false;
-  try {
-    return new URL(origin).host === host;
-  } catch {
-    return false;
-  }
-}
 
 function allowedPace(request: Request, limit: number, windowMs: number) {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
@@ -37,22 +28,6 @@ function sameText(left: string, right: string) {
   return timingSafeEqual(a, b);
 }
 
-async function signedIn(request: Request) {
-  const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
-  if (!apiKey) return true;
-  const header = request.headers.get("authorization") ?? "";
-  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
-  if (!token) return false;
-  const lookup = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ idToken: token }),
-  }).catch(() => null);
-  if (!lookup?.ok) return false;
-  const data = (await lookup.json().catch(() => null)) as { users?: unknown[] } | null;
-  return Array.isArray(data?.users) && data.users.length > 0;
-}
-
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return Response.json({ error: "forbidden" }, { status: 403 });
   if (!vaultReady()) return Response.json({ error: "unavailable" }, { status: 503 });
@@ -65,7 +40,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "invalid" }, { status: 400 });
   }
   if (!body || typeof body !== "object") return Response.json({ error: "invalid" }, { status: 400 });
-  const record = body as { op?: unknown; state?: BankState; sealed?: unknown; pin?: unknown; code?: unknown; codes?: unknown };
+  const record = body as { op?: unknown; state?: BankState; revision?: unknown; sealed?: unknown; pin?: unknown; code?: unknown; codes?: unknown };
   if (record.op === "check-pin" || record.op === "check-code") {
     if (!allowedPace(request, 5, 15 * 60_000)) return Response.json({ error: "forbidden" }, { status: 429 });
     try {
@@ -93,8 +68,16 @@ export async function POST(request: Request) {
     return Response.json({ error: "invalid" }, { status: 400 });
   }
   try {
-    const state = record.op === "seal" ? sealState(record.state) : openState(record.state);
-    return Response.json({ state }, { headers: { "Cache-Control": "no-store" } });
+    if (record.op === "open") {
+      return Response.json({ state: openState(record.state) }, { headers: { "Cache-Control": "no-store" } });
+    }
+    const base = typeof record.revision === "number" && Number.isInteger(record.revision) ? record.revision : null;
+    const saved = await writePlainDesk(normalizeBank(record.state), base);
+    const status = saved.kind === "conflict" ? 409 : 200;
+    return Response.json(
+      { state: saved.state, revision: saved.revision, conflict: saved.kind === "conflict" },
+      { status, headers: { "Cache-Control": "no-store" } },
+    );
   } catch {
     return Response.json({ error: "failed" }, { status: 400 });
   }

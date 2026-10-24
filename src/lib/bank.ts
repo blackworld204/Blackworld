@@ -1,6 +1,8 @@
 import { CURRENCIES, balancesOf, emptyBalances, isMoneyCode, type MoneyCode } from "@/lib/currencies";
 import { isSealed } from "@/lib/sealed";
-import { openRemote, sealRemote, stateNeedsOpen } from "@/lib/vault-client";
+import { firebaseAuth } from "@/lib/firebase";
+import { dispatchHooks } from "@/lib/dispatch-hooks";
+import { currentRevision, openRemote, sealRemote, stateNeedsOpen } from "@/lib/vault-client";
 
 function storedText(value: unknown) {
   if (isSealed(value)) return value;
@@ -29,6 +31,7 @@ export type BankUser = {
   webhookUrl?: string;
   approvalLimit?: number;
   totpSecret?: string;
+  referralId?: string;
   recoveryCodes?: string[];
   alerts?: AlertPrefs;
   privacy?: PrivacyPrefs;
@@ -94,6 +97,7 @@ export type BankCard = {
   primary: boolean;
   frozen?: boolean;
   kind?: "virtual" | "physical";
+  spendLimit?: number;
 };
 
 export type BankPayee = {
@@ -119,6 +123,8 @@ export type BankReferral = {
 
 export const REFERRAL_REWARD = 250;
 
+export type NoteChannel = "admin" | "transfer" | "security" | "statement";
+
 export type BankNote = {
   id: string;
   userId?: string;
@@ -126,6 +132,7 @@ export type BankNote = {
   body: string;
   at: string;
   read: boolean;
+  channel?: NoteChannel;
 };
 
 export type TransferDraft = {
@@ -247,24 +254,7 @@ export function seedBank(): BankState {
         currency: "USD",
       },
     ],
-    notes: [
-      {
-        id: "note_deposit_bw",
-        userId: "usr_blackworld",
-        title: "Deposit received",
-        body: "USD 50,000.00 is available in your account.",
-        at: hoursAgo(19),
-        read: false,
-      },
-      {
-        id: "note_admin_bw",
-        userId: "usr_blackworld",
-        title: "Admin mode",
-        body: "This account can manage users, balances, and permissions.",
-        at: hoursAgo(2),
-        read: false,
-      },
-    ],
+    notes: [],
     referrals: [],
     schedules: [],
     approvals: [],
@@ -296,10 +286,12 @@ export function normalizeBank(parsed: Partial<BankState>): BankState {
       : undefined,
   }));
   const placeholderEmails = new Set(["johnsmith@gmail.com", "jordan.lee@blackworld.com"]);
-  const placeholderIds = new Set(users.filter((user) => placeholderEmails.has(user.email.toLowerCase())).map((user) => user.id));
+  const readableMail = (email: string) => (email.startsWith("bw1.") ? "" : email.toLowerCase());
+  const placeholderIds = new Set(users.filter((user) => placeholderEmails.has(readableMail(user.email))).map((user) => user.id));
   const keptUsers = users.filter((user) => !placeholderIds.has(user.id));
   const presenter = seed.users.find((user) => user.email === PRESENTATION_EMAIL);
-  const hasPresenter = keptUsers.some((user) => user.email.toLowerCase() === PRESENTATION_EMAIL);
+  const sealedDesk = keptUsers.some((user) => user.email.startsWith("bw1."));
+  const hasPresenter = sealedDesk || keptUsers.some((user) => readableMail(user.email) === PRESENTATION_EMAIL);
   const owned = <T extends { userId?: string }>(rows: T[]) => rows.filter((row) => !row.userId || !placeholderIds.has(row.userId));
   const txs = owned(parsed.txs ?? []);
   const cards = owned((parsed.cards ?? []).map((card) => ({
@@ -311,13 +303,17 @@ export function normalizeBank(parsed: Partial<BankState>): BankState {
   const notes = owned((parsed.notes ?? []).map((note) => ({
     ...note,
     userId: typeof note.userId === "string" ? note.userId : undefined,
-  })));
+    channel:
+      note.channel === "admin" || note.channel === "transfer" || note.channel === "security" || note.channel === "statement"
+        ? note.channel
+        : undefined,
+  }))).filter((note) => note.id !== "note_deposit_bw" && note.id !== "note_admin_bw");
   const addingPresenter = Boolean(presenter && !hasPresenter);
   return {
     users: addingPresenter && presenter ? [...keptUsers, presenter] : keptUsers,
     txs: addingPresenter && presenter ? [...txs, ...seed.txs.filter((item) => item.userId === presenter.id)] : txs,
     cards: addingPresenter && presenter ? [...cards, ...seed.cards.filter((item) => item.userId === presenter.id)] : cards,
-    notes: addingPresenter && presenter ? [...notes, ...seed.notes.filter((item) => item.userId === presenter.id)] : notes,
+    notes,
     payees: presenter && !hasPresenter ? [...payees, ...seed.payees.filter((item) => item.userId === presenter.id)] : payees,
     referrals: (Array.isArray(parsed.referrals) ? parsed.referrals : []).map((item) => ({
       ...item,
@@ -333,6 +329,21 @@ export function normalizeBank(parsed: Partial<BankState>): BankState {
 let memory: BankState | null = null;
 let hydrating: Promise<BankState> | null = null;
 let commitSerial = 0;
+let replaceSerial = 0;
+const heldLive = new Map<string, BankNote>();
+const quietNotes = new Set<string>();
+
+/** Notes older than this were already on the desk. They fill the list without a new alert. */
+const LIVE_ALERT_MS = 15 * 60_000;
+
+export function noteIsQuiet(id: string) {
+  return quietNotes.has(id);
+}
+
+function deskProblem(name: string) {
+  if (typeof window === "undefined" || !firebaseAuth()?.currentUser) return;
+  window.dispatchEvent(new Event(name));
+}
 
 function readStored(): BankState | null {
   if (typeof window === "undefined") return null;
@@ -363,16 +374,26 @@ export function hydrateBank() {
         const opened = await openRemote(stored);
         if (!opened) {
           memory = stored;
+          deskProblem("bw-desk-open");
           return stored;
         }
         plain = normalizeBank(opened);
-        memory = plain;
-        window.dispatchEvent(new Event(EVENT));
-        return plain;
       }
       memory = plain;
       const sealed = await sealRemote(plain);
-      if (sealed) localStorage.setItem(KEY, JSON.stringify(sealed));
+      if (!sealed) {
+        if (firebaseAuth()?.currentUser) deskProblem("bw-desk-save");
+      } else if (sealed.kind === "conflict") {
+        const opened = await openRemote(sealed.state);
+        if (!opened) deskProblem("bw-desk-open");
+        else {
+          plain = normalizeBank(opened);
+          memory = plain;
+          localStorage.setItem(KEY, JSON.stringify(sealed.state));
+        }
+      } else {
+        localStorage.setItem(KEY, JSON.stringify(sealed.state));
+      }
       window.dispatchEvent(new Event(EVENT));
       return plain;
     })().finally(() => {
@@ -383,30 +404,129 @@ export function hydrateBank() {
 }
 
 export function saveBank(next: BankState) {
+  const prior = memory;
   const clean = normalizeBank(next);
+  const fresh = prior
+    ? clean.events.filter((event) => !prior.events.some((item) => item.id === event.id)).map((event) => event.id)
+    : [];
   memory = clean;
   window.dispatchEvent(new Event(EVENT));
   if (applyingRemote || stateNeedsOpen(clean)) return;
   const serial = ++commitSerial;
   void sealRemote(clean).then((sealed) => {
-    if (!sealed || serial !== commitSerial) return;
-    localStorage.setItem(KEY, JSON.stringify(sealed));
-    persistBank?.(sealed);
+    if (serial !== commitSerial) return;
+    if (!sealed) {
+      deskProblem("bw-desk-save");
+      return;
+    }
+    if (sealed.kind === "conflict") {
+      void replaceBank(sealed.state);
+      return;
+    }
+    if (sealed.revision < (currentRevision() ?? sealed.revision)) return;
+    localStorage.setItem(KEY, JSON.stringify(sealed.state));
+    persistBank?.(sealed.state);
+    if (fresh.length) void dispatchHooks(fresh);
   });
 }
 
+function withHeld(state: BankState) {
+  const ids = new Set(state.notes.map((note) => note.id));
+  const extra = [...heldLive.values()].filter((note) => !ids.has(note.id));
+  for (const note of heldLive.values()) {
+    if (ids.has(note.id)) heldLive.delete(note.id);
+  }
+  if (extra.length === 0) return state;
+  return { ...state, notes: [...extra, ...state.notes] };
+}
+
+let noteMerges = 0;
+
+function persistMerged(changed: boolean) {
+  if (!changed || !memory || noteMerges > 3) return;
+  noteMerges += 1;
+  saveBank(memory);
+}
+
+/** Keeps a notice that was saved on this browser when an older desk copy arrives. */
+function keepRecentNotes(previous: BankState | null, remote: BankState) {
+  const merged = withHeld(remote);
+  if (!previous) return merged;
+  const ids = new Set(merged.notes.map((note) => note.id));
+  const now = Date.now();
+  const extra = previous.notes.filter((note) => {
+    if (ids.has(note.id)) return false;
+    const at = Date.parse(note.at);
+    return Number.isFinite(at) && now - at < 24 * 3600_000;
+  });
+  if (extra.length === 0) return merged;
+  return { ...merged, notes: [...extra, ...merged.notes] };
+}
+
 export async function replaceBank(incoming: BankState) {
+  const ticket = ++replaceSerial;
+  commitSerial += 1;
   const stored = normalizeBank(JSON.parse(JSON.stringify(incoming)) as BankState);
   if (!stateNeedsOpen(stored)) {
-    saveBank(stored);
+    if (ticket !== replaceSerial) return;
+    applyingRemote = true;
+    let changed = false;
+    try {
+      const merged = keepRecentNotes(memory, stored);
+      changed = merged.notes.length !== stored.notes.length;
+      memory = merged;
+      if (typeof window !== "undefined") {
+        localStorage.setItem(KEY, JSON.stringify(merged));
+        window.dispatchEvent(new Event(EVENT));
+      }
+    } finally {
+      applyingRemote = false;
+    }
+    persistMerged(changed);
     return;
   }
   const opened = await openRemote(stored);
-  if (!opened) return;
+  if (ticket !== replaceSerial) return;
+  if (!opened) {
+    deskProblem("bw-desk-open");
+    if (memory && !stateNeedsOpen(memory)) saveBank(memory);
+    return;
+  }
+  applyingRemote = true;
+  let changed = false;
+  try {
+    const remote = normalizeBank(opened);
+    const merged = keepRecentNotes(memory, remote);
+    changed = merged.notes.length !== remote.notes.length;
+    memory = merged;
+    localStorage.setItem(KEY, JSON.stringify({ ...stored, notes: merged.notes }));
+    window.dispatchEvent(new Event(EVENT));
+  } finally {
+    applyingRemote = false;
+  }
+  persistMerged(changed);
+}
+
+/** Merges an admin notice into this desk immediately, before the full desk copy arrives. */
+export function receiveLiveNotes(notes: BankNote[], email: string) {
+  if (typeof window === "undefined" || notes.length === 0) return;
+  const state = loadBank();
+  const user = userByEmail(state, email);
+  if (!user) return;
+  const now = Date.now();
+  const mine = notes.filter((note) => note.userId === user.id);
+  for (const note of mine) {
+    heldLive.set(note.id, note);
+    const at = Date.parse(note.at);
+    if (!Number.isFinite(at) || now - at > LIVE_ALERT_MS) quietNotes.add(note.id);
+  }
+  const known = new Set(state.notes.map((note) => note.id));
+  const fresh = mine.filter((note) => !known.has(note.id));
+  if (fresh.length === 0) return;
+  commitSerial += 1;
   applyingRemote = true;
   try {
-    memory = normalizeBank(opened);
-    localStorage.setItem(KEY, JSON.stringify(stored));
+    memory = normalizeBank({ ...state, notes: [...fresh, ...state.notes] });
     window.dispatchEvent(new Event(EVENT));
   } finally {
     applyingRemote = false;
@@ -419,7 +539,8 @@ export function subscribeBank(fn: () => void) {
 }
 
 export function userByEmail(state: BankState, email: string) {
-  return state.users.find((user) => user.email.toLowerCase() === email.toLowerCase()) ?? null;
+  const needle = email.toLowerCase();
+  return state.users.find((user) => !user.email.startsWith("bw1.") && user.email.toLowerCase() === needle) ?? null;
 }
 
 const LOCALE_TAGS: Record<string, string> = {
@@ -508,6 +629,19 @@ export function forgetPushToken(userId: string, token: string) {
   patchUser(userId, { pushTokens: user.pushTokens.filter((item) => item !== token) });
 }
 
+export function forgetPushTokens(tokens: string[]) {
+  const drop = new Set(tokens.filter(Boolean));
+  if (drop.size === 0) return;
+  const state = loadBank();
+  let changed = false;
+  const users = state.users.map((user) => {
+    if (!user.pushTokens?.some((token) => drop.has(token))) return user;
+    changed = true;
+    return { ...user, pushTokens: user.pushTokens.filter((token) => !drop.has(token)) };
+  });
+  if (changed) saveBank({ ...state, users });
+}
+
 export function patchUser(userId: string, patch: Partial<BankUser>) {
   const safe = { ...patch };
   delete safe.role;
@@ -592,7 +726,7 @@ export function addUser(input: {
   issueCard?: boolean;
 }): { error: string | null; last4: string | null } {
   const state = loadBank();
-  if (state.users.some((user) => user.email.toLowerCase() === input.email.toLowerCase())) {
+  if (state.users.some((user) => !user.email.startsWith("bw1.") && user.email.toLowerCase() === input.email.toLowerCase())) {
     return { error: "That email already has an account.", last4: null };
   }
   const user: BankUser = {
@@ -999,6 +1133,52 @@ export function addNote(input: { userId: string; title: string; body: string }) 
   return note;
 }
 
+function deviceTokens(user: BankUser) {
+  const plain: string[] = [];
+  for (const token of user.pushTokens ?? []) {
+    if (token.startsWith("bw1.") || token.length < 20 || token.length > 4096) continue;
+    plain.push(token);
+  }
+  return plain;
+}
+
+/** Writes one unread notice per account. Open desks see it through the live desk sync. */
+export function postAdminNotice(
+  actorId: string,
+  input: { userIds: string[] | "all"; title: string; body: string },
+): { error: string } | { error: null; title: string; body: string; deliveries: { tag: string; tokens: string[] }[] } {
+  const state = loadBank();
+  if (!actingAdmin(state, actorId)) return { error: "Only an admin can send a notice." };
+  const title = input.title.trim();
+  const body = input.body.trim();
+  if (title.length < 2 || title.length > 80) return { error: "Enter a title." };
+  if (body.length < 2 || body.length > 400) return { error: "Enter a message." };
+  const targets = input.userIds === "all" ? state.users : state.users.filter((user) => input.userIds.includes(user.id));
+  if (targets.length === 0) return { error: "Choose an account." };
+  const at = new Date().toISOString();
+  const rows = targets.map((user) => {
+    const note: BankNote = {
+      id: id("note"),
+      userId: user.id,
+      title,
+      body,
+      at,
+      read: false,
+      channel: "admin",
+    };
+    return { note, tokens: deviceTokens(user) };
+  });
+  const notes = rows.map((row) => row.note);
+  saveBank({ ...state, notes: [...notes, ...state.notes] });
+  void import("@/lib/live-notice").then((mod) => mod.publishLiveNotices(notes)).catch(() => undefined);
+  return {
+    error: null,
+    title,
+    body,
+    deliveries: rows.map((row) => ({ tag: row.note.id, tokens: row.tokens })),
+  };
+}
+
 export function setCardFrozen(userId: string, cardId: string, frozen: boolean) {
   const state = loadBank();
   if (!state.cards.some((card) => card.id === cardId && card.userId === userId)) return;
@@ -1024,7 +1204,21 @@ export function removePayee(payeeId: string) {
   saveBank({ ...state, payees: state.payees.filter((payee) => payee.id !== payeeId) });
 }
 
+export const REFERRAL_CODE = /^BW-[A-F0-9]{32}$/;
+
+export function ensureReferralCode(userId: string) {
+  const user = loadBank().users.find((item) => item.id === userId);
+  if (!user || user.status !== "active") return "";
+  if (user.referralId && REFERRAL_CODE.test(user.referralId)) return user.referralId;
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  const code = `BW-${[...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("").toUpperCase()}`;
+  patchUser(userId, { referralId: code });
+  return code;
+}
+
 export function referralCode(user: BankUser) {
+  if (user.referralId && REFERRAL_CODE.test(user.referralId)) return user.referralId;
   const first = (user.name.split(/\s+/)[0] ?? "Guest").replace(/[^a-z]/gi, "").slice(0, 8).toUpperCase() || "GUEST";
   let hash = 0;
   for (const char of user.id) hash = (hash * 33 + char.charCodeAt(0)) >>> 0;
@@ -1058,14 +1252,20 @@ export function addReferral(input: { userId: string; company: string; email: str
   return null;
 }
 
-export function earnReferral(code: string, company: string, email: string) {
-  const state = loadBank();
-  const owner = state.users.find((user) => referralCode(user) === code.trim().toUpperCase());
+/** Credits the referrer on a desk copy. Returns null when the code, email, or reward does not apply. */
+export function creditReferral(state: BankState, code: string, company: string, email: string) {
+  const token = code.trim().toUpperCase();
+  if (!REFERRAL_CODE.test(token)) return null;
+  const owner = state.users.find((user) => user.status === "active" && user.referralId?.toUpperCase() === token);
   if (!owner) return null;
   const normalized = email.trim().toLowerCase();
-  if (!normalized || normalized === owner.email.toLowerCase()) return null;
+  if (!normalized || owner.email.startsWith("bw1.") || normalized === owner.email.toLowerCase()) return null;
+  const hourAgo = Date.now() - 60 * 60 * 1000;
+  const recent = state.txs.filter((tx) => tx.title === "Referral reward" && Date.parse(tx.at) > hourAgo).length;
+  if (recent >= 8) return null;
+  if (state.referrals.some((item) => !item.email.startsWith("bw1.") && item.email.toLowerCase() === normalized && item.status === "earned")) return null;
   const name = company.trim() || normalized;
-  const existing = state.referrals.find((item) => item.userId === owner.id && item.email === normalized);
+  const existing = state.referrals.find((item) => item.userId === owner.id && !item.email.startsWith("bw1.") && item.email.toLowerCase() === normalized);
   if (existing?.status === "earned") return null;
   const at = new Date().toISOString();
   const referrals = existing
@@ -1090,8 +1290,16 @@ export function earnReferral(code: string, company: string, email: string) {
     amount: REFERRAL_REWARD,
     direction: "in",
   });
-  if (result.error) return result.error;
-  saveBank(result.state);
+  if (result.error) return null;
+  const eventId = result.state.events[0]?.id;
+  if (!eventId) return null;
+  return { state: result.state, eventId };
+}
+
+export function earnReferral(code: string, company: string, email: string) {
+  const next = creditReferral(loadBank(), code, company, email);
+  if (!next) return null;
+  saveBank(next.state);
   return null;
 }
 

@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Glyph } from "@/components/glyph";
 import { useSession } from "@/components/session";
 import { useI18n } from "@/i18n/provider";
-import { loadBank, markNote, markNotes, notesFor, subscribeBank, userByEmail, when, type BankNote } from "@/lib/bank";
+import { loadBank, markNote, markNotes, noteIsQuiet, notesFor, subscribeBank, userByEmail, when, type BankNote } from "@/lib/bank";
 
 export function Inbox() {
   const pathname = usePathname();
@@ -15,6 +16,7 @@ export function Inbox() {
   const root = useRef<HTMLDivElement>(null);
   const seen = useRef<Set<string> | null>(null);
   const [open, setOpen] = useState(false);
+  const [ask, setAsk] = useState(false);
   const [notes, setNotes] = useState<BankNote[]>([]);
   const [userId, setUserId] = useState("");
   const [live, setLive] = useState<BankNote[]>([]);
@@ -46,7 +48,7 @@ export function Inbox() {
         seen.current = new Set(ids);
         return;
       }
-      const fresh = mine.filter((note) => !note.read && !seen.current?.has(note.id));
+      const fresh = mine.filter((note) => !note.read && !seen.current?.has(note.id) && !noteIsQuiet(note.id));
       for (const note of mine) seen.current.add(note.id);
       if (fresh.length === 0) return;
       setLive((current) => [...fresh, ...current].slice(0, 3));
@@ -64,7 +66,7 @@ export function Inbox() {
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape" && !document.querySelector(".confirm-layer")) setOpen(false);
     };
     const onPointer = (event: PointerEvent) => {
       if (!(event.target instanceof Node) || !root.current?.contains(event.target)) setOpen(false);
@@ -111,7 +113,7 @@ export function Inbox() {
           <div className="inbox-head">
             <strong>{t("Notifications")}</strong>
             {unread > 0 && userId ? (
-              <button type="button" className="text-button" onClick={() => markNotes(userId, true)}>
+              <button type="button" className="text-button" onClick={() => setAsk(true)}>
                 {t("Mark all read")}
               </button>
             ) : null}
@@ -153,6 +155,17 @@ export function Inbox() {
           ))}
         </div>
       ) : null}
+      <ConfirmDialog
+        open={ask}
+        title={t("Mark all as read?")}
+        body={t("Every notice on this desk is marked read.")}
+        confirmLabel={t("Mark all read")}
+        onClose={() => setAsk(false)}
+        onConfirm={() => {
+          if (userId) markNotes(userId, true);
+          setAsk(false);
+        }}
+      />
     </div>
   );
 }

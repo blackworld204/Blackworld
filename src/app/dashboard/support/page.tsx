@@ -1,22 +1,74 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BusyButton } from "@/components/busy-button";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { SupportCenter } from "@/components/support-center";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
+import { when } from "@/lib/bank";
 import { CONTACT_EMAIL, CONTACT_PHONE, CONTACT_PHONE_DISPLAY, CONTACT_WHATSAPP } from "@/lib/contact";
+import { firebaseAuth } from "@/lib/firebase";
+import { messageFailure } from "@/lib/message-error";
 
 const TOPICS = ["General", "Technical", "Account", "Transaction", "Security", "Other"];
 
+type InboxRow = { id: string; at: string; name: string; email: string; topic: string; message: string };
+
+function AdminInbox({ locale }: { locale: string }) {
+  const { t } = useI18n();
+  const [rows, setRows] = useState<InboxRow[] | null>(null);
+
+  useEffect(() => {
+    const auth = firebaseAuth();
+    const current = auth?.currentUser;
+    if (!current) return;
+    const controller = new AbortController();
+    void current.getIdToken().then((token) =>
+      fetch("/api/messages", { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal }),
+    )
+      .then(async (response) => {
+        if (!response?.ok) return;
+        const data = (await response.json()) as { messages?: InboxRow[] };
+        if (Array.isArray(data.messages)) setRows(data.messages);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
+
+  if (!rows) return null;
+  return (
+    <section className="stack">
+      <h2>{t("Inbox")}</h2>
+      {rows.length === 0 ? <p className="muted">{t("No messages yet.")}</p> : null}
+      <ul className="tx-list">
+        {rows.map((item) => (
+          <li key={item.id}>
+            <div>
+              <strong>
+                {item.name} · {t(item.topic)}
+              </strong>
+              <span className="muted">
+                {item.email} · {when(item.at, locale)}
+              </span>
+              <span>{item.message}</span>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export default function SupportPage() {
   const { user } = useAccount();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [topic, setTopic] = useState(TOPICS[0]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [ask, setAsk] = useState(false);
 
   if (!user) return <div className="app-hold" />;
 
@@ -24,8 +76,14 @@ export default function SupportPage() {
     event.preventDefault();
     if (busy || !user) return;
     if (message.trim().length < 12) return setError(t("Write a short note, at least a sentence."));
-    setBusy(true);
     setError("");
+    setAsk(true);
+  }
+
+  function send() {
+    if (!user) return;
+    setAsk(false);
+    setBusy(true);
     void fetch("/api/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -36,14 +94,14 @@ export default function SupportPage() {
         message: message.trim(),
       }),
     })
-      .then((response) => {
+      .then(async (response) => {
         if (!response.ok) {
-          setError(t("The message did not send. Try again."));
+          setError(t(await messageFailure(response)));
           return;
         }
         setSent(true);
       })
-      .catch(() => setError(t("The message did not send. Try again.")))
+      .catch(() => setError(t("The message could not be reached. Try again.")))
       .finally(() => setBusy(false));
   }
 
@@ -61,6 +119,7 @@ export default function SupportPage() {
           </a>
         </p>
       </header>
+      {user.role === "admin" ? <AdminInbox locale={locale} /> : null}
       <SupportCenter desk />
       <section className="support-form">
         <h2>{t("Send a message")}</h2>
@@ -89,6 +148,14 @@ export default function SupportPage() {
           </form>
         )}
       </section>
+      <ConfirmDialog
+        open={ask}
+        title={t("Send this message?")}
+        body={t("It goes to the desk.")}
+        confirmLabel={t("Send message")}
+        onClose={() => setAsk(false)}
+        onConfirm={send}
+      />
     </div>
   );
 }

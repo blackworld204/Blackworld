@@ -13,6 +13,7 @@ export default function ApprovalsPage() {
   const [limit, setLimit] = useState("");
   const [error, setError] = useState("");
   const [ask, setAsk] = useState<{ id: string; approve: boolean; holder: string; total: string } | null>(null);
+  const [askLimit, setAskLimit] = useState(false);
 
   if (!state || !user) return <div className="app-hold" />;
   const mine = user.role === "admin" ? state.approvals : state.approvals.filter((item) => item.userId === user.id);
@@ -23,7 +24,13 @@ export default function ApprovalsPage() {
     event.preventDefault();
     const value = Number(limit);
     if (!Number.isFinite(value) || value < 0) return setError(t("Enter an amount of zero or more."));
-    setApprovalLimit(value);
+    setError("");
+    setAskLimit(true);
+  }
+
+  function applyLimit() {
+    setAskLimit(false);
+    setApprovalLimit(Number(limit));
     setLimit("");
     setError("");
     toast(t("Limit saved."));
@@ -118,6 +125,14 @@ export default function ApprovalsPage() {
           }
           toast(ask.approve ? t("Approved.") : t("Declined."));
         }}
+      />
+      <ConfirmDialog
+        open={askLimit}
+        title={t("Save this limit?")}
+        body={t("Members above this amount wait for approval.")}
+        confirmLabel={t("Save limit")}
+        onClose={() => setAskLimit(false)}
+        onConfirm={applyLimit}
       />
     </div>
   );

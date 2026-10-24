@@ -48,7 +48,7 @@ export function firebaseDb(): Firestore | null {
 /** Creates a sign-in on a second app so the current desk session stays signed in. */
 export async function createPresentationUser(email: string, password: string) {
   const config = firebaseWebConfig();
-  if (!config) throw new Error("The account could not be opened.");
+  if (!config) throw new Error("Sign-in is not available, so this account cannot be opened.");
   const name = "blackworld-provision";
   const existing = getApps().find((app) => app.name === name);
   const app = existing ?? initializeApp(config, name);

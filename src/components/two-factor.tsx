@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CopyButton } from "@/components/copy-button";
 import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
@@ -27,6 +28,7 @@ export function TwoFactorPanel() {
   const [error, setError] = useState("");
   const [codes, setCodes] = useState<string[] | null>(null);
   const [turningOff, setTurningOff] = useState(false);
+  const [ask, setAsk] = useState<null | "on" | "off" | "codes">(null);
 
   if (!user) return null;
   const enabled = Boolean(user.totpSecret);
@@ -45,6 +47,11 @@ export function TwoFactorPanel() {
       setError(t("That code does not match."));
       return;
     }
+    setError("");
+    setAsk("on");
+  }
+
+  function commitSetup() {
     const next = createRecoveryCodes();
     enableTotp(user!.id, secret, next);
     if (alertsOf(user!).security) {
@@ -64,12 +71,20 @@ export function TwoFactorPanel() {
   function confirmOff(event: React.FormEvent) {
     event.preventDefault();
     if (!user?.totpSecret) return;
-    const ok =
-      verifyTotp(user.totpSecret, code) || consumeRecoveryCode(user.id, code);
+    const normalized = code.replace(/[\s-]/g, "").toUpperCase();
+    const formatted = normalized.length === 8 ? `${normalized.slice(0, 4)}-${normalized.slice(4)}` : "";
+    const ok = verifyTotp(user.totpSecret, code) || Boolean(formatted && user.recoveryCodes?.includes(formatted));
     if (!ok) {
       setError(t("That code is not valid."));
       return;
     }
+    setError("");
+    setAsk("off");
+  }
+
+  function commitOff() {
+    if (!user?.totpSecret) return;
+    if (!verifyTotp(user.totpSecret, code)) consumeRecoveryCode(user.id, code);
     disableTotp(user.id);
     if (alertsOf(user).security) {
       addNote({
@@ -91,6 +106,12 @@ export function TwoFactorPanel() {
       setError(t("That code does not match."));
       return;
     }
+    setError("");
+    setAsk("codes");
+  }
+
+  function commitCodes() {
+    if (!user?.totpSecret) return;
     const next = createRecoveryCodes();
     enableTotp(user.id, user.totpSecret, next);
     setCodes(next);
@@ -261,6 +282,32 @@ export function TwoFactorPanel() {
           {t("Set up authenticator")}
         </button>
       )}
+      <ConfirmDialog
+        open={ask !== null}
+        title={
+          ask === "off"
+            ? t("Turn off the authenticator?")
+            : ask === "codes"
+              ? t("Replace the recovery codes?")
+              : t("Turn on the authenticator?")
+        }
+        body={
+          ask === "off"
+            ? t("Sign-in will no longer ask for a code.")
+            : ask === "codes"
+              ? t("The current codes stop working.")
+              : t("Sign-in will ask for a code.")
+        }
+        confirmLabel={ask === "off" ? t("Turn off") : ask === "codes" ? t("Replace codes") : t("Turn on")}
+        onClose={() => setAsk(null)}
+        onConfirm={() => {
+          const choice = ask;
+          setAsk(null);
+          if (choice === "on") commitSetup();
+          if (choice === "off") commitOff();
+          if (choice === "codes") commitCodes();
+        }}
+      />
     </section>
   );
 }

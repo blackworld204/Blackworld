@@ -45,8 +45,12 @@ export async function showPush(title: string, body: string, tag: string) {
   });
 }
 
-export function noteAllowsPush(title: string, alerts: { transfers: boolean; security: boolean; statements: boolean }) {
-  const label = title.toLowerCase();
+export function noteAllowsPush(
+  note: { title: string; channel?: string },
+  alerts: { transfers: boolean; security: boolean; statements: boolean },
+) {
+  if (note.channel === "admin") return true;
+  const label = note.title.toLowerCase();
   if (label.includes("pin") || label.includes("sign-in") || label.includes("security")) return alerts.security;
   if (label.includes("statement")) return alerts.statements;
   return alerts.transfers;

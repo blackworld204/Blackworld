@@ -33,9 +33,10 @@ export async function bindFirebasePush(userId: string) {
   const stops = [
     messaging.onRegistered(instance, (id) => rememberPushToken(userId, id)),
     messaging.onMessage(instance, (payload) => {
-      const title = payload.notification?.title || payload.data?.title || "Blackworld";
-      const body = payload.notification?.body || payload.data?.body || "";
-      void showPush(title, body, payload.messageId || "firebase");
+      const data = payload.data ?? {};
+      const title = data.title || payload.notification?.title || "Blackworld";
+      const body = data.body || payload.notification?.body || "";
+      void showPush(title, body, data.tag || payload.messageId || "firebase");
     }),
   ];
   stopListen = () => {

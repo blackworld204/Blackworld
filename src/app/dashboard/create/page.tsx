@@ -3,9 +3,13 @@
 import Link from "next/link";
 import { useState } from "react";
 import { BusyButton } from "@/components/busy-button";
+import { PhoneInput } from "@/components/phone-input";
+import { PasswordStrength } from "@/components/password-strength";
+import { SecretInput } from "@/components/secret-input";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
 import { authErrorMessage } from "@/components/session";
+import { addressSchema, collectErrors, personalSchema, securitySchema } from "@/lib/account-schema";
 import { addUser, money, type BankAddress } from "@/lib/bank";
 import { createPresentationUser } from "@/lib/firebase";
 
@@ -14,6 +18,7 @@ const empty = {
   last: "",
   email: "",
   password: "",
+  confirmPassword: "",
   phone: "",
   balance: "10000",
   street: "",
@@ -32,7 +37,7 @@ export default function CreateAccountPage() {
   const { t, locale } = useI18n();
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<FormState>(empty);
-  const [error, setError] = useState("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [done, setDone] = useState<{
     email: string;
     last4: string | null;
@@ -58,6 +63,22 @@ export default function CreateAccountPage() {
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
+    setErrors((current) => {
+      const related = key === "password" ? "confirmPassword" : key === "pin" ? "confirm" : "";
+      if (!current[key] && !(related && current[related])) return current;
+      const next = { ...current };
+      delete next[key];
+      if (related) delete next[related];
+      return next;
+    });
+  }
+
+  function note(key: string) {
+    return errors[key] ? (
+      <p className="form-error" role="alert">
+        {t(errors[key])}
+      </p>
+    ) : null;
   }
 
   const name = `${form.first.trim()} ${form.last.trim()}`.trim();
@@ -74,57 +95,30 @@ export default function CreateAccountPage() {
 
   function nextPersonal(event: React.FormEvent) {
     event.preventDefault();
-    if (form.first.trim().length < 1 || form.last.trim().length < 1) {
-      setError(t("Enter a first and last name."));
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-      setError(t("Enter a valid email."));
-      return;
-    }
-    if (form.password.length < 8) {
-      setError(t("Password must be at least 8 characters."));
-      return;
-    }
-    if (!/^[0-9+\-\s()]{7,}$/.test(form.phone)) {
-      setError(t("Enter a valid phone number."));
-      return;
-    }
-    if (!Number.isFinite(balance) || balance < 0) {
-      setError(t("Enter an opening balance of zero or more."));
-      return;
-    }
-    setError("");
+    const found = collectErrors(personalSchema, form);
+    setErrors(found);
+    if (Object.keys(found).length > 0) return;
     setStep(1);
   }
 
   function nextAddress(event: React.FormEvent) {
     event.preventDefault();
-    const started = form.street.trim() || form.city.trim() || form.zip.trim();
-    if (
-      started &&
-      (!form.street.trim() || !form.city.trim() || !form.zip.trim())
-    ) {
-      setError(
-        t("Enter the street, city, and postal code, or skip the address."),
-      );
-      return;
-    }
-    setError("");
+    const found = collectErrors(addressSchema, form);
+    setErrors(found);
+    if (Object.keys(found).length > 0) return;
     setStep(2);
   }
 
   function finish(event: React.FormEvent) {
     event.preventDefault();
     if (busy) return;
-    if (!/^\d{4}$/.test(form.pin)) {
-      setError(t("PIN must be 4 digits."));
-      return;
-    }
-    if (form.pin !== form.confirm) {
-      setError(t("PIN entries do not match."));
-      return;
-    }
+    const found = collectErrors(securitySchema, form);
+    setErrors(found);
+    if (Object.keys(found).length > 0) return;
+    openAccount();
+  }
+
+  function openAccount() {
     setBusy(true);
     void createPresentationUser(form.email.trim(), form.password)
       .then(() => {
@@ -138,11 +132,11 @@ export default function CreateAccountPage() {
           issueCard: form.card,
         });
         if (result.error) {
-          setError(t(result.error));
+          setErrors({ _form: result.error });
           return;
         }
-        setError("");
-        setForm((current) => ({ ...current, password: "" }));
+        setErrors({});
+        setForm((current) => ({ ...current, password: "", confirmPassword: "" }));
         setDone({
           email: form.email.trim(),
           last4: result.last4,
@@ -150,7 +144,7 @@ export default function CreateAccountPage() {
         });
       })
       .catch((reason: unknown) => {
-        setError(t(authErrorMessage(reason)));
+        setErrors({ _form: authErrorMessage(reason) });
       })
       .finally(() => setBusy(false));
   }
@@ -243,16 +237,20 @@ export default function CreateAccountPage() {
               <input
                 value={form.first}
                 autoComplete="given-name"
+                aria-invalid={Boolean(errors.first)}
                 onChange={(event) => set("first", event.target.value)}
               />
+              {note("first")}
             </label>
             <label className="field">
               <span>{t("Last name")}</span>
               <input
                 value={form.last}
                 autoComplete="family-name"
+                aria-invalid={Boolean(errors.last)}
                 onChange={(event) => set("last", event.target.value)}
               />
+              {note("last")}
             </label>
           </div>
           <label className="field">
@@ -261,37 +259,56 @@ export default function CreateAccountPage() {
               type="email"
               autoComplete="email"
               value={form.email}
+              aria-invalid={Boolean(errors.email)}
               onChange={(event) => set("email", event.target.value)}
             />
+            {note("email")}
           </label>
           <label className="field">
             <span>{t("Password")}</span>
-            <input
-              type="password"
+            <SecretInput
               autoComplete="new-password"
               value={form.password}
-              onChange={(event) => set("password", event.target.value)}
+              invalid={Boolean(errors.password)}
+              showLabel={t("Show password")}
+              hideLabel={t("Hide password")}
+              onChange={(value) => set("password", value)}
             />
+            <PasswordStrength password={form.password} />
+            {note("password")}
           </label>
-          <p className="muted">{t("At least 8 characters.")}</p>
           <label className="field">
-            <span>{t("Phone")}</span>
-            <input
-              value={form.phone}
-              autoComplete="tel"
-              inputMode="tel"
-              onChange={(event) => set("phone", event.target.value)}
+            <span>{t("Confirm password")}</span>
+            <SecretInput
+              autoComplete="new-password"
+              value={form.confirmPassword}
+              invalid={Boolean(errors.confirmPassword)}
+              showLabel={t("Show password")}
+              hideLabel={t("Hide password")}
+              onChange={(value) => set("confirmPassword", value)}
             />
+            {note("confirmPassword")}
           </label>
+          <div className="field">
+            <PhoneInput
+              label={t("Phone")}
+              value={form.phone}
+              invalid={Boolean(errors.phone)}
+              onChange={(value) => set("phone", value)}
+            />
+            {note("phone")}
+          </div>
           <label className="field">
             <span>{t("Opening balance (USD)")}</span>
             <input
               inputMode="decimal"
               value={form.balance}
+              aria-invalid={Boolean(errors.balance)}
               onChange={(event) => set("balance", event.target.value)}
             />
+            {note("balance")}
           </label>
-          {error ? <p className="form-error">{error}</p> : null}
+          {note("_form")}
           <button className="btn btn-primary" type="submit">
             {t("Continue")}
           </button>
@@ -305,6 +322,7 @@ export default function CreateAccountPage() {
             <input
               value={form.street}
               autoComplete="street-address"
+              aria-invalid={Boolean(errors.street)}
               onChange={(event) => set("street", event.target.value)}
             />
           </label>
@@ -334,13 +352,13 @@ export default function CreateAccountPage() {
               onChange={(event) => set("country", event.target.value)}
             />
           </label>
-          {error ? <p className="form-error">{error}</p> : null}
+          {note("_form")}
           <div className="form-row">
             <button
               className="text-button"
               type="button"
               onClick={() => {
-                setError("");
+                setErrors({});
                 setStep(0);
               }}
             >
@@ -353,7 +371,7 @@ export default function CreateAccountPage() {
                 set("street", "");
                 set("city", "");
                 set("zip", "");
-                setError("");
+                setErrors({});
                 setStep(2);
               }}
             >
@@ -403,8 +421,10 @@ export default function CreateAccountPage() {
               maxLength={4}
               autoComplete="off"
               value={form.pin}
+              aria-invalid={Boolean(errors.pin)}
               onChange={(event) => set("pin", event.target.value)}
             />
+            {note("pin")}
           </label>
           <label className="field">
             <span>{t("Confirm PIN")}</span>
@@ -413,8 +433,10 @@ export default function CreateAccountPage() {
               maxLength={4}
               autoComplete="off"
               value={form.confirm}
+              aria-invalid={Boolean(errors.confirm)}
               onChange={(event) => set("confirm", event.target.value)}
             />
+            {note("confirm")}
           </label>
           <label className="choice-line">
             <input
@@ -424,13 +446,13 @@ export default function CreateAccountPage() {
             />
             {t("Issue a virtual card")}
           </label>
-          {error ? <p className="form-error">{error}</p> : null}
+          {note("_form")}
           <div className="form-row">
             <button
               className="text-button"
               type="button"
               onClick={() => {
-                setError("");
+                setErrors({});
                 setStep(1);
               }}
             >

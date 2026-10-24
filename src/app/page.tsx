@@ -55,8 +55,8 @@ export default function HomePage() {
               )}
             </p>
             <div className="actions">
-              <Link className="btn btn-primary" href="/apply">
-                {t("Apply for partnership")}
+              <Link className="btn btn-primary" href="/register">
+                {t("Create account")}
               </Link>
               <Link className="btn btn-ghost" href="/docs">
                 {t("API documentation")}
@@ -157,8 +157,8 @@ export default function HomePage() {
           <h2>{t("Talk with us.")}</h2>
           <p>{t("Accounts, cards, and payments for institutions.")}</p>
           <div className="actions">
-            <Link className="btn btn-primary" href="/apply">
-              {t("Apply for partnership")}
+            <Link className="btn btn-primary" href="/register">
+              {t("Create account")}
             </Link>
             <Link className="btn btn-ghost" href="/sales">
               {t("Talk to sales")}

@@ -22,7 +22,7 @@ export function Footer() {
           <h2>{t("Platform")}</h2>
           <Link href="/docs">{t("API documentation")}</Link>
           <Link href="/support">{t("Support")}</Link>
-          <Link href="/apply">{t("Partner program")}</Link>
+          <Link href="/register">{t("Create account")}</Link>
           <Link href="/#exchange">{t("Exchange")}</Link>
         </div>
         <div>

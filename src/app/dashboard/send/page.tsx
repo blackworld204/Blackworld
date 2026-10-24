@@ -49,6 +49,8 @@ export default function SendPage() {
   const [busy, setBusy] = useState(false);
   const [held, setHeld] = useState(false);
   const [dropPayee, setDropPayee] = useState<string | null>(null);
+  const [askPay, setAskPay] = useState(false);
+  const [askSave, setAskSave] = useState(false);
 
   if (!state || !user) return <div className="app-hold" />;
   const payees = state.payees.filter((payee) => payee.userId === user.id);
@@ -84,6 +86,13 @@ export default function SendPage() {
       toast(message);
       return setError(message);
     }
+    setError("");
+    setAskPay(true);
+  }
+
+  function pay() {
+    if (busy || !user) return;
+    setAskPay(false);
     setBusy(true);
     const payment = {
       holder: draft.holder.trim(),
@@ -140,18 +149,7 @@ export default function SendPage() {
             <button
               className="btn btn-ghost"
               type="button"
-              onClick={() => {
-                addPayee({
-                  userId: user.id,
-                  holder: draft.holder.trim(),
-                  bank: draft.bank.trim(),
-                  routing: draft.routing.trim(),
-                  swift: draft.swift.trim(),
-                  account: draft.account.trim(),
-                  currency: draft.currency,
-                });
-                setSaved(true);
-              }}
+              onClick={() => setAskSave(true)}
             >
               {t("Save recipient")}
             </button>
@@ -355,6 +353,35 @@ export default function SendPage() {
         onConfirm={() => {
           if (dropPayee) removePayee(dropPayee);
           setDropPayee(null);
+        }}
+      />
+      <ConfirmDialog
+        open={askPay}
+        title={t("Send this transfer?")}
+        body={t("{amount} leaves this account, including the fee.", { amount: money(total, draft.currency, locale) })}
+        confirmLabel={t("Confirm transfer")}
+        onClose={() => setAskPay(false)}
+        onConfirm={pay}
+      />
+      <ConfirmDialog
+        open={askSave}
+        title={t("Save this recipient?")}
+        body={t("The account is kept for the next transfer.")}
+        confirmLabel={t("Save recipient")}
+        onClose={() => setAskSave(false)}
+        onConfirm={() => {
+          if (!user) return;
+          addPayee({
+            userId: user.id,
+            holder: draft.holder.trim(),
+            bank: draft.bank.trim(),
+            routing: draft.routing.trim(),
+            swift: draft.swift.trim(),
+            account: draft.account.trim(),
+            currency: draft.currency,
+          });
+          setAskSave(false);
+          setSaved(true);
         }}
       />
     </div>

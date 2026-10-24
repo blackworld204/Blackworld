@@ -84,8 +84,8 @@ export function Header() {
               {t("Login")}
             </Link>
           ) : null}
-          <Link href="/apply" className="btn btn-primary btn-sm">
-            {t("Apply")}
+          <Link href="/register" className="btn btn-primary btn-sm">
+            {t("Create account")}
           </Link>
         </div>
       </div>
@@ -121,8 +121,8 @@ export function Header() {
               <Link href="/login" onClick={() => setOpen(false)}>{t("Login")}</Link>
             )}
           </nav>
-          <Link href="/apply" className="btn btn-primary" onClick={() => setOpen(false)}>
-            {t("Apply for partnership")}
+          <Link href="/register" className="btn btn-primary" onClick={() => setOpen(false)}>
+            {t("Create account")}
           </Link>
         </div>
       ) : null}

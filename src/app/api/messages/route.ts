@@ -1,4 +1,10 @@
+import { creditReferral, normalizeBank, PRESENTATION_EMAIL } from "@/lib/bank";
 import { CONTACT_EMAIL } from "@/lib/contact";
+import { readDesk, withDeskLock } from "@/lib/desk-store";
+import { listInbox, markInboxMailed, saveInboxMessage } from "@/lib/inbox";
+import { sameOrigin, signedEmail } from "@/lib/request-guard";
+import { deliverEvents } from "@/lib/send-hook";
+import { openState, sealState } from "@/lib/vault";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,25 +35,67 @@ function validEmail(value: string) {
 
 const hits = new Map<string, number[]>();
 
-function sameOrigin(request: Request) {
-  const origin = request.headers.get("origin");
-  const host = request.headers.get("host");
-  if (!origin || !host) return false;
+function pace(key: string, limit: number, windowMs: number) {
+  const now = Date.now();
+  const recent = (hits.get(key) ?? []).filter((at) => now - at < windowMs);
+  if (recent.length >= limit) {
+    hits.set(key, recent);
+    return false;
+  }
+  recent.push(now);
+  hits.set(key, recent);
+  return true;
+}
+
+async function callerIsAdmin(email: string) {
+  if (!email) return false;
+  const desk = await readDesk();
+  if (!desk) return email.toLowerCase() === PRESENTATION_EMAIL.toLowerCase();
   try {
-    return new URL(origin).host === host;
+    const plain = normalizeBank(openState(desk.state));
+    const user = plain.users.find((item) => item.email.toLowerCase() === email.toLowerCase());
+    return Boolean(user && user.role === "admin" && user.status === "active");
   } catch {
     return false;
   }
 }
 
+async function tryMail(input: { name: string; email: string; topic: string; company: string; message: string }, origin: string, referer: string) {
+  const response = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(CONTACT_EMAIL)}`, {
+    method: "POST",
+    signal: AbortSignal.timeout(6000),
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Origin: origin,
+      Referer: referer,
+    },
+    body: JSON.stringify({
+      name: input.name,
+      email: input.email,
+      topic: input.topic,
+      company: input.company,
+      message: input.message || input.company,
+      _subject: `Blackworld · ${input.topic}`,
+      _replyto: input.email,
+      _template: "table",
+      _captcha: "false",
+    }),
+  }).catch(() => null);
+  const data = await response?.json().catch(() => null);
+  return Boolean(response?.ok && data && data.success !== false && data.success !== "false");
+}
+
+export async function GET(request: Request) {
+  if (!sameOrigin(request)) return Response.json({ error: "forbidden" }, { status: 403 });
+  const email = await signedEmail(request);
+  if (email == null || !(await callerIsAdmin(email))) return Response.json({ error: "forbidden" }, { status: 403 });
+  const messages = await listInbox();
+  return Response.json({ messages }, { headers: { "Cache-Control": "no-store" } });
+}
+
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return Response.json({ error: "forbidden" }, { status: 403 });
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
-  const now = Date.now();
-  const recent = (hits.get(ip) ?? []).filter((at) => now - at < 60_000);
-  if (recent.length >= 5) return Response.json({ error: "forbidden" }, { status: 429 });
-  recent.push(now);
-  hits.set(ip, recent);
   const length = Number(request.headers.get("content-length") ?? 0);
   if (length > 20_000) return Response.json({ error: "invalid" }, { status: 413 });
   let body: unknown;
@@ -68,31 +116,36 @@ export async function POST(request: Request) {
   if (!TOPICS.has(topic)) return Response.json({ error: "topic" }, { status: 422 });
   if (topic === "Sales" && company.length < 2) return Response.json({ error: "company" }, { status: 422 });
   if (topic !== "Sales" && message.length < 8) return Response.json({ error: "message" }, { status: 422 });
+  if (!pace("messages", 30, 60_000) || !pace(`mail:${email.toLowerCase()}`, 3, 10 * 60_000)) {
+    return Response.json({ error: "forbidden" }, { status: 429 });
+  }
 
+  let saved;
+  try {
+    saved = await saveInboxMessage({ name, email, topic, company, message });
+  } catch {
+    return Response.json({ error: "failed" }, { status: 502 });
+  }
+  const referral = text(record.referral, 40).toUpperCase();
+  if (/^BW-[A-F0-9]{32}$/.test(referral)) {
+    const credited = await withDeskLock(async (current) => {
+      if (!current) return { file: null, value: null };
+      try {
+        const plain = normalizeBank(openState(current.state));
+        const next = creditReferral(plain, referral, company, email);
+        if (!next) return { file: null, value: null };
+        return {
+          file: { revision: current.revision + 1, state: sealState(next.state) },
+          value: next,
+        };
+      } catch {
+        return { file: null, value: null };
+      }
+    }).catch(() => null);
+    if (credited) await deliverEvents(credited.state, [credited.eventId]).catch(() => 0);
+  }
   const origin = request.headers.get("origin") || new URL(request.url).origin;
-  const response = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(CONTACT_EMAIL)}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      Origin: origin,
-      Referer: request.headers.get("referer") || `${origin}/support`,
-    },
-    body: JSON.stringify({
-      name,
-      email,
-      topic,
-      company,
-      message: message || company,
-      _subject: `Blackworld · ${topic}`,
-      _replyto: email,
-      _template: "table",
-      _captcha: "false",
-    }),
-  }).catch(() => null);
-
-  const data = await response?.json().catch(() => null);
-  const accepted = Boolean(response?.ok && data && data.success !== false && data.success !== "false");
-  if (!accepted) return Response.json({ error: "failed" }, { status: 502 });
+  const mailed = await tryMail({ name, email, topic, company, message }, origin, request.headers.get("referer") || `${origin}/support`);
+  if (mailed) await markInboxMailed(saved.id).catch(() => undefined);
   return Response.json({ ok: true });
 }

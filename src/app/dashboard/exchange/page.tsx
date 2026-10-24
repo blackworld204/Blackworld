@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { BusyButton } from "@/components/busy-button";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CurrencyFlag } from "@/components/currency-flag";
 import { CurrencySelect } from "@/components/currency-select";
 import { toast } from "@/components/toast";
@@ -23,6 +24,7 @@ export default function ExchangePage() {
   const [error, setError] = useState("");
   const [held, setHeld] = useState<{ fee: number; received: number; rate: number } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [ask, setAsk] = useState(false);
 
   function perUsd(code: MoneyCode) {
     return rates.find((rate) => rate.code === code)?.perUsd ?? 1;
@@ -54,6 +56,13 @@ export default function ExchangePage() {
 
   function confirm() {
     if (busy || !held || !user) return;
+    setError("");
+    setAsk(true);
+  }
+
+  function settle() {
+    if (busy || !held || !user) return;
+    setAsk(false);
     setBusy(true);
     const received = Math.round(held.received * 100) / 100;
     const failed = settleExchange(user.id, from, to, value, received, money(held.fee, from, locale));
@@ -197,6 +206,14 @@ export default function ExchangePage() {
             <BusyButton className="btn btn-primary" type="button" busy={busy} onClick={confirm}>
               {t("Confirm exchange")}
             </BusyButton>
+            <ConfirmDialog
+              open={ask}
+              title={t("Exchange these currencies?")}
+              body={t("You receive {amount}.", { amount: held ? money(held.received, to, locale) : "" })}
+              confirmLabel={t("Confirm exchange")}
+              onClose={() => setAsk(false)}
+              onConfirm={settle}
+            />
           </div>
         </div>
       )}

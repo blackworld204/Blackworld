@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DateSelect } from "@/components/date-select";
 import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
@@ -18,6 +19,7 @@ export default function CardsPage() {
   const [kind, setKind] = useState<"virtual" | "physical">("virtual");
   const [error, setError] = useState("");
   const [ask, setAsk] = useState<{ id: string; last4: string; frozen: boolean; remove: boolean } | null>(null);
+  const [askAdd, setAskAdd] = useState(false);
 
   if (!state || !user) return <div className="app-hold" />;
   const cards = state.cards.filter((card) => card.userId === user.id);
@@ -29,6 +31,13 @@ export default function CardsPage() {
     if (!/^\d{2}\/\d{2}$/.test(expiry)) return setError(t("Use expiry as MM/YY."));
     const month = Number(expiry.slice(0, 2));
     if (month < 1 || month > 12) return setError(t("Use expiry as MM/YY."));
+    setError("");
+    setAskAdd(true);
+  }
+
+  function add() {
+    if (!user) return;
+    setAskAdd(false);
     addCard({
       userId: user!.id,
       holder: holder.trim().toUpperCase(),
@@ -105,7 +114,7 @@ export default function CardsPage() {
           </label>
           <label className="field">
             <span>{t("Expiry")}</span>
-            <input placeholder={t("MM/YY")} value={expiry} onChange={(event) => setExpiry(event.target.value)} />
+            <DateSelect kind="month" value={expiry} onChange={setExpiry} />
           </label>
         </div>
         <div className="filter-row" role="group" aria-label={t("Card type")}>
@@ -160,6 +169,14 @@ export default function CardsPage() {
           }
           setAsk(null);
         }}
+      />
+      <ConfirmDialog
+        open={askAdd}
+        title={t("Add this card?")}
+        body={t("The card ending {last4} is added to this account.", { last4 })}
+        confirmLabel={t("Add card")}
+        onClose={() => setAskAdd(false)}
+        onConfirm={add}
       />
     </div>
   );

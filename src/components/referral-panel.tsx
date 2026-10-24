@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CopyButton } from "@/components/copy-button";
 import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
-import { REFERRAL_REWARD, addReferral, money, referralCode, when } from "@/lib/bank";
+import { REFERRAL_CODE, REFERRAL_REWARD, addReferral, ensureReferralCode, money, referralCode, when } from "@/lib/bank";
 
 function validEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -17,15 +18,21 @@ export function ReferralPanel() {
   const [company, setCompany] = useState("");
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
+  const [ask, setAsk] = useState(false);
   const [origin, setOrigin] = useState("");
 
   useEffect(() => {
     setOrigin(window.location.origin);
   }, []);
 
+  useEffect(() => {
+    if (!user?.id || (user.referralId && REFERRAL_CODE.test(user.referralId))) return;
+    ensureReferralCode(user.id);
+  }, [user?.id, user?.referralId]);
+
   if (!state || !user) return null;
   const code = referralCode(user);
-  const link = origin ? `${origin}/apply?ref=${code}` : code;
+  const link = origin ? `${origin}/register?ref=${code}` : code;
   const rows = state.referrals.filter((item) => item.userId === user.id);
   const earned = rows.reduce((sum, item) => sum + (item.status === "earned" ? item.reward : 0), 0);
   const reward = money(REFERRAL_REWARD, "USD", locale);
@@ -34,7 +41,14 @@ export function ReferralPanel() {
     event.preventDefault();
     if (company.trim().length < 2) return setError(t("Enter the company name."));
     if (!validEmail(email)) return setError(t("Enter a work email."));
-    const failed = addReferral({ userId: user!.id, company, email });
+    setError("");
+    setAsk(true);
+  }
+
+  function save() {
+    if (!user) return;
+    setAsk(false);
+    const failed = addReferral({ userId: user.id, company, email });
     if (failed) {
       const message = t(failed);
       toast(message);
@@ -43,7 +57,7 @@ export function ReferralPanel() {
     setCompany("");
     setEmail("");
     setError("");
-    toast(t("Referral saved. You earn when they apply."));
+    toast(t("Referral saved. You earn when they create an account."));
   }
 
   return (
@@ -54,7 +68,7 @@ export function ReferralPanel() {
           <h2 id="referrals-title">{t("Earn {amount}", { amount: reward })}</h2>
           <p>
             {t(
-              "Share your code. The credit lands when that company applies.",
+              "Share your code. The credit lands when they create an account.",
             )}
           </p>
           <div className="refer-code">
@@ -106,6 +120,14 @@ export function ReferralPanel() {
           ))}
         </ul>
       )}
+      <ConfirmDialog
+        open={ask}
+        title={t("Save this referral?")}
+        body={t("{company} is added to your list.", { company: company.trim() })}
+        confirmLabel={t("Save referral")}
+        onClose={() => setAsk(false)}
+        onConfirm={save}
+      />
     </section>
   );
 }

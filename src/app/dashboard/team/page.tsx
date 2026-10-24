@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { BusyButton } from "@/components/busy-button";
+import { PasswordStrength } from "@/components/password-strength";
+import { SecretInput } from "@/components/secret-input";
+import { PhoneInput } from "@/components/phone-input";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
@@ -9,6 +12,7 @@ import { useI18n } from "@/i18n/provider";
 import { authErrorMessage } from "@/components/session";
 import { inviteMember, removeMember } from "@/lib/bank";
 import { createPresentationUser } from "@/lib/firebase";
+import { isStrongPassword, strongPasswordMessage } from "@/lib/password-strength";
 
 export default function TeamPage() {
   const { state, user } = useAccount();
@@ -18,6 +22,7 @@ export default function TeamPage() {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const [ask, setAsk] = useState(false);
   const [error, setError] = useState("");
   const [pin, setPin] = useState("");
   const [drop, setDrop] = useState<{ id: string; name: string } | null>(null);
@@ -41,8 +46,14 @@ export default function TeamPage() {
     if (user?.role !== "admin") return setError(t("Only an admin can invite."));
     if (name.trim().length < 2) return setError(t("Enter a name."));
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return setError(t("Enter a work email."));
-    if (password.length < 8) return setError(t("Password must be at least 8 characters."));
+    if (!isStrongPassword(password)) return setError(t(strongPasswordMessage));
     if (phone.trim().length < 6) return setError(t("Enter a phone number."));
+    setError("");
+    setAsk(true);
+  }
+
+  function invite() {
+    setAsk(false);
     const nextPin = String(Math.floor(1000 + Math.random() * 9000));
     setBusy(true);
     void createPresentationUser(email.trim(), password)
@@ -114,12 +125,18 @@ export default function TeamPage() {
           </label>
           <label className="field">
             <span>{t("Password")}</span>
-            <input type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} />
+            <SecretInput
+              autoComplete="new-password"
+              value={password}
+              showLabel={t("Show password")}
+              hideLabel={t("Hide password")}
+              onChange={setPassword}
+            />
+            <PasswordStrength password={password} />
           </label>
-          <label className="field">
-            <span>{t("Phone number")}</span>
-            <input value={phone} onChange={(event) => setPhone(event.target.value)} />
-          </label>
+          <div className="field">
+            <PhoneInput label={t("Phone number")} value={phone} onChange={setPhone} />
+          </div>
           {error ? <p className="form-error">{error}</p> : null}
           <BusyButton className="btn btn-primary" type="submit" busy={busy}>
             {t("Invite")}
@@ -144,6 +161,14 @@ export default function TeamPage() {
           }
           toast(t("Member removed."));
         }}
+      />
+      <ConfirmDialog
+        open={ask}
+        title={t("Invite this colleague?")}
+        body={t("{email} gets a separate account.", { email: email.trim() })}
+        confirmLabel={t("Invite")}
+        onClose={() => setAsk(false)}
+        onConfirm={invite}
       />
     </div>
   );

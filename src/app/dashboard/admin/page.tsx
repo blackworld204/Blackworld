@@ -4,10 +4,12 @@ import Link from "next/link";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { NoticeDialog } from "@/components/notice-dialog";
 import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
-import { MONEY, adjustBalance, money, removeMember, setAccountRole, setAccountStatus, setCreateAccess, type BankUser, type MoneyCode } from "@/lib/bank";
+import { MONEY, adjustBalance, forgetPushTokens, money, postAdminNotice, removeMember, setAccountRole, setAccountStatus, setCreateAccess, type BankUser, type MoneyCode } from "@/lib/bank";
+import { deliverPush } from "@/lib/deliver-push";
 
 function initials(name: string) {
   const letters = name
@@ -28,7 +30,7 @@ function visibleBalances(user: BankUser) {
   return MONEY.filter((item) => item.code === "USD" || item.code === "EUR" || user.balances[item.code] > 0);
 }
 
-function Mark({ name }: { name: "balance" | "block" | "allow" | "remove" | "shield" | "users" | "active" }) {
+function Mark({ name }: { name: "balance" | "block" | "allow" | "remove" | "shield" | "users" | "active" | "bell" }) {
   const common = {
     viewBox: "0 0 24 24",
     width: 16,
@@ -92,6 +94,15 @@ function Mark({ name }: { name: "balance" | "block" | "allow" | "remove" | "shie
       </svg>
     );
   }
+  if (name === "bell") {
+    return (
+      <svg {...common}>
+        <path d="M6 16h12" />
+        <path d="M7 16V10a5 5 0 0 1 10 0v6" />
+        <path d="M10 16a2 2 0 0 0 4 0" />
+      </svg>
+    );
+  }
   return (
     <svg {...common}>
       <path d="M5 7h14" />
@@ -106,6 +117,7 @@ export default function AdminPage() {
   const { t, locale } = useI18n();
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
+  const [askBalance, setAskBalance] = useState(false);
   const [code, setCode] = useState<MoneyCode>("USD");
   const [amount, setAmount] = useState("0.00");
   const [mode, setMode] = useState<"add" | "deduct">("add");
@@ -117,6 +129,7 @@ export default function AdminPage() {
     | { type: "remove"; id: string; name: string }
     | null
   >(null);
+  const [notice, setNotice] = useState<{ userIds: string[] | "all"; name: string | null } | null>(null);
 
   const rows = useMemo(() => {
     if (!state) return [];
@@ -161,6 +174,15 @@ export default function AdminPage() {
       setError(t("That is more than the current balance."));
       return;
     }
+    setError("");
+    setAskBalance(true);
+  }
+
+  function applyBalance(subject: BankUser) {
+    if (!user) return;
+    setAskBalance(false);
+    const value = Number(amount);
+    const current = subject.balances[code];
     const digits = code === "JPY" ? 0 : 2;
     const factor = 10 ** digits;
     const next = Math.round((mode === "add" ? current + value : current - value) * factor) / factor;
@@ -186,7 +208,7 @@ export default function AdminPage() {
           </span>
           <div>
             <h1>{t("Admin panel")}</h1>
-            <p>{t("Accounts, balances, and permissions on this desk.")}</p>
+            <p>{t("Accounts, balances, permissions, and notices on this desk.")}</p>
           </div>
           <Link className="btn btn-primary admin-create" href="/dashboard/create">
             + {t("Create account")}
@@ -228,14 +250,19 @@ export default function AdminPage() {
       <section className="admin-board">
         <header className="admin-board-head">
           <h2>{t("User management")}</h2>
-          <label className="field admin-search">
-            <span className="sr-only">{t("Search")}</span>
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={t("Search users")}
-            />
-          </label>
+          <div className="admin-board-tools">
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setNotice({ userIds: "all", name: null })}>
+              {t("Notify everyone")}
+            </button>
+            <label className="field admin-search">
+              <span className="sr-only">{t("Search")}</span>
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={t("Search users")}
+              />
+            </label>
+          </div>
         </header>
         {rows.length === 0 ? <p className="muted admin-empty">{t("No users found.")}</p> : null}
         <div className="admin-scroll">
@@ -290,6 +317,15 @@ export default function AdminPage() {
                     </td>
                     <td>
                       <div className="admin-actions">
+                        <button
+                          type="button"
+                          className="admin-icon is-notice"
+                          data-label={t("Send notice")}
+                          aria-label={t("Send notice")}
+                          onClick={() => setNotice({ userIds: [item.id], name: item.name })}
+                        >
+                          <Mark name="bell" />
+                        </button>
                         <button
                           type="button"
                           className="admin-icon is-money"
@@ -380,6 +416,44 @@ export default function AdminPage() {
           setError("");
         }}
         onSave={saveBalance}
+      />
+      <ConfirmDialog
+        open={askBalance}
+        title={t("Update this balance?")}
+        body={t("{name} receives the new balance.", { name: state.users.find((item) => item.id === editing)?.name ?? "" })}
+        confirmLabel={t("Update balance")}
+        onClose={() => setAskBalance(false)}
+        onConfirm={() => {
+          const subject = state.users.find((item) => item.id === editing);
+          if (subject) applyBalance(subject);
+          else setAskBalance(false);
+        }}
+      />
+      <NoticeDialog
+        key={notice ? (notice.userIds === "all" ? "all" : notice.userIds.join()) : "closed"}
+        open={notice !== null}
+        name={notice?.name ?? null}
+        onClose={() => setNotice(null)}
+        onSend={async (title, body) => {
+          if (!notice || !user) return "Only an admin can send a notice.";
+          const result = postAdminNotice(user.id, { userIds: notice.userIds, title, body });
+          if (result.error !== null) return result.error;
+          const push = await deliverPush(
+            result.deliveries.map((item) => ({
+              title: result.title,
+              body: result.body,
+              tag: item.tag,
+              tokens: item.tokens,
+            })),
+          );
+          if (push.stale.length) forgetPushTokens(push.stale);
+          setNotice(null);
+          const hadDevices = result.deliveries.some((item) => item.tokens.length > 0);
+          if (push.failed) toast(t("Notice sent. The push did not go out."));
+          else if (hadDevices && !push.configured) toast(t("Notice sent. It is on their desk. Push from the server is not configured."));
+          else toast(t("Notice sent."));
+          return null;
+        }}
       />
       <ConfirmDialog
         open={ask !== null}

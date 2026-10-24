@@ -38,8 +38,8 @@ export function AboutView() {
           <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
         </p>
         <div className="actions">
-          <Link className="btn btn-primary" href="/apply">
-            {t("Apply for partnership")}
+          <Link className="btn btn-primary" href="/register">
+            {t("Create account")}
           </Link>
           <Link className="btn btn-ghost" href="/legal/compliance">
             {t("Compliance")}

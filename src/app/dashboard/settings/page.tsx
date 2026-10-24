@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CurrencySelect } from "@/components/currency-select";
+import { PhoneInput } from "@/components/phone-input";
 import { LanguageSelect } from "@/components/language-select";
 import { TwoFactorPanel } from "@/components/two-factor";
 import { useAccount } from "@/components/use-account";
@@ -58,7 +59,13 @@ function SettingsForm({ user }: { user: BankUser }) {
   const [pinMessage, setPinMessage] = useState("");
   const [pinError, setPinError] = useState("");
   const [push, setPush] = useState<PushStatus>("off");
+  const [pushError, setPushError] = useState("");
   const [askPhoto, setAskPhoto] = useState(false);
+  const [pending, setPending] = useState<{ title: string; body: string; label: string; run: () => void } | null>(null);
+
+  function askChange(title: string, body: string, label: string, run: () => void) {
+    setPending({ title, body, label, run });
+  }
 
   const alerts = alertsOf(user);
   const privacy = privacyOf(user);
@@ -109,9 +116,11 @@ function SettingsForm({ user }: { user: BankUser }) {
       setError(t("Enter a phone number."));
       return;
     }
-    patchUser(user.id, { name: `${first.trim()} ${last.trim()}`, phone: phone.trim() });
     setError("");
-    setSaved(t("Profile saved."));
+    askChange(t("Save this profile?"), t("The name and phone number on this account change."), t("Save profile"), () => {
+      patchUser(user.id, { name: `${first.trim()} ${last.trim()}`, phone: phone.trim() });
+      setSaved(t("Profile saved."));
+    });
   }
 
   async function onPhoto(event: React.ChangeEvent<HTMLInputElement>) {
@@ -128,10 +137,13 @@ function SettingsForm({ user }: { user: BankUser }) {
       setError(t("Use an image under 1.5 MB."));
       return;
     }
-    await savePhoto(user.id, file);
-    patchUser(user.id, { hasPhoto: true });
     setError("");
-    setSaved(t("Photo updated."));
+    askChange(t("Use this photo?"), t("It replaces the photo on this account."), t("Use photo"), () => {
+      void savePhoto(user.id, file).then(() => {
+        patchUser(user.id, { hasPhoto: true });
+        setSaved(t("Photo updated."));
+      });
+    });
   }
 
   async function removePhoto() {
@@ -157,6 +169,8 @@ function SettingsForm({ user }: { user: BankUser }) {
       setPinError(t("PIN entries do not match."));
       return;
     }
+    setPinError("");
+    askChange(t("Change the transfer PIN?"), t("Transfers use the new PIN."), t("Change PIN"), () => {
     patchUser(user.id, { pin: pinNext });
     if (alerts.security) {
       addNote({
@@ -170,6 +184,7 @@ function SettingsForm({ user }: { user: BankUser }) {
     setPinConfirm("");
     setPinError("");
     setPinMessage(t("PIN updated."));
+    });
   }
 
   function downloadProfile() {
@@ -245,10 +260,9 @@ function SettingsForm({ user }: { user: BankUser }) {
                 <span>{t("Email address")}</span>
                 <input value={user.email} readOnly />
               </label>
-              <label className="field">
-                <span>{t("Phone number")}</span>
-                <input value={phone} onChange={(event) => setPhone(event.target.value)} autoComplete="tel" inputMode="tel" />
-              </label>
+              <div className="field">
+                <PhoneInput label={t("Phone number")} value={phone} onChange={setPhone} />
+              </div>
               {error ? <p className="form-error">{error}</p> : null}
               {saved ? <p>{saved}</p> : null}
               <button className="btn btn-primary" type="submit">
@@ -311,7 +325,15 @@ function SettingsForm({ user }: { user: BankUser }) {
                 <input
                   type="checkbox"
                   checked={Boolean(user.twoFactor)}
-                  onChange={(event) => patchUser(user.id, { twoFactor: event.target.checked })}
+                  onChange={(event) => {
+                    const on = event.target.checked;
+                    askChange(
+                      t(on ? "Ask for the PIN at sign-in?" : "Stop asking for the PIN at sign-in?"),
+                      t(on ? "Sign-in will ask for the transfer PIN." : "Sign-in will not ask for the transfer PIN."),
+                      t(on ? "Turn on" : "Turn off"),
+                      () => patchUser(user.id, { twoFactor: on }),
+                    );
+                  }}
                 />
                 {t("PIN at sign-in")}
               </label>
@@ -333,28 +355,49 @@ function SettingsForm({ user }: { user: BankUser }) {
                         : push === "denied"
                           ? t("Alerts are blocked. Allow them in the site settings.")
                           : push === "on"
-                            ? t("On. Alerts appear when money moves.")
-                            : t("Off. Turn on to receive alerts when money moves.")}
+                            ? t("On. Alerts appear when money moves or an administrator sends a notice.")
+                            : t("Off. Turn on to receive alerts when money moves or an administrator sends a notice.")}
                     </span>
+                    {pushError ? <p className="form-error" role="alert">{pushError}</p> : null}
                   </div>
                   <button
                     type="button"
                     className="btn btn-ghost btn-sm"
                     aria-pressed={push === "on"}
                     disabled={push === "unsupported"}
-                    onClick={async () => {
-                      if (push === "on") {
+                    onClick={() => {
+                      const turningOff = push === "on";
+                      askChange(
+                        t(turningOff ? "Turn {name} off?" : "Turn {name} on?", { name: t("Push") }),
+                        t("This setting is saved on the account."),
+                        t(turningOff ? "Turn off" : "Turn on"),
+                        () => void (async () => {
+                      if (turningOff) {
                         await releaseFirebasePush(user.id);
                         disablePush();
                         setPush("off");
+                        setPushError("");
                         return;
                       }
                       const next = await enablePush();
-                      if (next === "on") await bindFirebasePush(user.id).catch(() => undefined);
-                      setPush(next);
-                      if (next === "on") {
-                        await showPush(t("Push is on"), t("Alerts appear when money moves."), "push-on");
+                      if (next !== "on") {
+                        setPush(next);
+                        setPushError("");
+                        return;
                       }
+                      try {
+                        await bindFirebasePush(user.id);
+                      } catch {
+                        disablePush();
+                        setPush("off");
+                        setPushError(t("Alerts could not be turned on. Try again."));
+                        return;
+                      }
+                      setPush("on");
+                      setPushError("");
+                      await showPush(t("Push is on"), t("Alerts appear when money moves."), "push-on");
+                        })(),
+                      );
                     }}
                   >
                     {push === "on" ? t("On") : t("Off")}
@@ -369,7 +412,7 @@ function SettingsForm({ user }: { user: BankUser }) {
                     type="button"
                     className="btn btn-ghost btn-sm"
                     aria-pressed={alerts.transfers}
-                    onClick={() => patchUser(user.id, { alerts: { ...alerts, transfers: !alerts.transfers } })}
+                    onClick={() => askChange(t(alerts.transfers ? "Turn {name} off?" : "Turn {name} on?", { name: t("Money movement") }), t("This setting is saved on the account."), t(alerts.transfers ? "Turn off" : "Turn on"), () => patchUser(user.id, { alerts: { ...alerts, transfers: !alerts.transfers } }))}
                   >
                     {alerts.transfers ? t("On") : t("Off")}
                   </button>
@@ -383,7 +426,7 @@ function SettingsForm({ user }: { user: BankUser }) {
                     type="button"
                     className="btn btn-ghost btn-sm"
                     aria-pressed={alerts.security}
-                    onClick={() => patchUser(user.id, { alerts: { ...alerts, security: !alerts.security } })}
+                    onClick={() => askChange(t(alerts.security ? "Turn {name} off?" : "Turn {name} on?", { name: t("Security") }), t("This setting is saved on the account."), t(alerts.security ? "Turn off" : "Turn on"), () => patchUser(user.id, { alerts: { ...alerts, security: !alerts.security } }))}
                   >
                     {alerts.security ? t("On") : t("Off")}
                   </button>
@@ -397,7 +440,7 @@ function SettingsForm({ user }: { user: BankUser }) {
                     type="button"
                     className="btn btn-ghost btn-sm"
                     aria-pressed={alerts.statements}
-                    onClick={() => patchUser(user.id, { alerts: { ...alerts, statements: !alerts.statements } })}
+                    onClick={() => askChange(t(alerts.statements ? "Turn {name} off?" : "Turn {name} on?", { name: t("Statements") }), t("This setting is saved on the account."), t(alerts.statements ? "Turn off" : "Turn on"), () => patchUser(user.id, { alerts: { ...alerts, statements: !alerts.statements } }))}
                   >
                     {alerts.statements ? t("On") : t("Off")}
                   </button>
@@ -422,7 +465,7 @@ function SettingsForm({ user }: { user: BankUser }) {
                     type="button"
                     className="btn btn-ghost btn-sm"
                     aria-pressed={privacy.statementEmail}
-                    onClick={() => patchUser(user.id, { privacy: { ...privacy, statementEmail: !privacy.statementEmail } })}
+                    onClick={() => askChange(t(privacy.statementEmail ? "Turn {name} off?" : "Turn {name} on?", { name: t("Statements") }), t("This setting is saved on the account."), t(privacy.statementEmail ? "Turn off" : "Turn on"), () => patchUser(user.id, { privacy: { ...privacy, statementEmail: !privacy.statementEmail } }))}
                   >
                     {privacy.statementEmail ? t("On") : t("Off")}
                   </button>
@@ -436,19 +479,42 @@ function SettingsForm({ user }: { user: BankUser }) {
                     type="button"
                     className="btn btn-ghost btn-sm"
                     aria-pressed={privacy.marketing}
-                    onClick={() => patchUser(user.id, { privacy: { ...privacy, marketing: !privacy.marketing } })}
+                    onClick={() => askChange(t(privacy.marketing ? "Turn {name} off?" : "Turn {name} on?", { name: t("Product notes") }), t("This setting is saved on the account."), t(privacy.marketing ? "Turn off" : "Turn on"), () => patchUser(user.id, { privacy: { ...privacy, marketing: !privacy.marketing } }))}
                   >
                     {privacy.marketing ? t("On") : t("Off")}
                   </button>
                 </li>
               </ul>
-              <button type="button" className="btn" onClick={downloadProfile}>
+              <button
+                type="button"
+                className="btn"
+                onClick={() =>
+                  askChange(
+                    t("Download this profile?"),
+                    t("A file with the name, email, and phone number is saved on this device."),
+                    t("Download"),
+                    downloadProfile,
+                  )
+                }
+              >
                 {t("Download profile")}
               </button>
             </div>
           ) : null}
         </div>
       </div>
+      <ConfirmDialog
+        open={pending !== null}
+        title={pending?.title ?? ""}
+        body={pending?.body ?? ""}
+        confirmLabel={pending?.label ?? t("Save")}
+        onClose={() => setPending(null)}
+        onConfirm={() => {
+          const next = pending;
+          setPending(null);
+          next?.run();
+        }}
+      />
     </div>
   );
 }

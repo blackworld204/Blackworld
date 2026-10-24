@@ -15,12 +15,20 @@ function startMessaging(config) {
     if (!title) return;
     return self.registration.showNotification(title, {
       body: payload.data?.body || "",
-      tag: payload.messageId || "blackworld",
-      data: { url: "/dashboard/notifications" },
+      tag: payload.data?.tag || payload.messageId || "blackworld",
+      data: { url: payload.data?.url || "/dashboard/notifications" },
     });
   });
   messagingReady = true;
 }
+
+try {
+  importScripts("/api/firebase-config");
+} catch (error) {
+  /* The open page can still pass the config. */
+}
+
+if (self.FIREBASE_WEB_CONFIG) startMessaging(self.FIREBASE_WEB_CONFIG);
 
 self.addEventListener("message", (event) => {
   if (event.data?.type === "firebase-config") startMessaging(event.data.config);
@@ -36,7 +44,8 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const target = new URL("/dashboard/notifications", self.location.origin).href;
+  const path = event.notification.data?.url || "/dashboard/notifications";
+  const target = new URL(path, self.location.origin).href;
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
       for (const client of windows) {

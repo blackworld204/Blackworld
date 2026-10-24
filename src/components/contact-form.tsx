@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { useState } from "react";
 import { BusyButton } from "@/components/busy-button";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useI18n } from "@/i18n/provider";
 import { CONTACT_EMAIL, CONTACT_PHONE, CONTACT_PHONE_DISPLAY, CONTACT_WHATSAPP } from "@/lib/contact";
+import { messageFailure } from "@/lib/message-error";
 
 function validEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -27,6 +29,7 @@ export function ContactForm({
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
+  const [ask, setAsk] = useState(false);
   const { t } = useI18n();
 
   if (done) {
@@ -49,7 +52,33 @@ export function ContactForm({
     );
   }
 
+  function send() {
+    setAsk(false);
+    setBusy(true);
+    void fetch("/api/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: name.trim(),
+        email: email.trim(),
+        topic: fields === "sales" ? "Sales" : topic,
+        company: company.trim(),
+        message: message.trim(),
+      }),
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          setError(t(await messageFailure(response)));
+          return;
+        }
+        setDone(true);
+      })
+      .catch(() => setError(t("The message could not be reached. Try again.")))
+      .finally(() => setBusy(false));
+  }
+
   const form = (
+    <>
     <form
       onSubmit={(event) => {
         event.preventDefault();
@@ -70,28 +99,8 @@ export function ContactForm({
           setError(t("Add a short message."));
           return;
         }
-        setBusy(true);
         setError("");
-        void fetch("/api/messages", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: name.trim(),
-            email: email.trim(),
-            topic: fields === "sales" ? "Sales" : topic,
-            company: company.trim(),
-            message: message.trim(),
-          }),
-        })
-          .then((response) => {
-            if (!response.ok) {
-              setError(t("The message did not send. Try again."));
-              return;
-            }
-            setDone(true);
-          })
-          .catch(() => setError(t("The message did not send. Try again.")))
-          .finally(() => setBusy(false));
+        setAsk(true);
       }}
     >
           <label className="field">
@@ -165,6 +174,15 @@ export function ContactForm({
             </BusyButton>
           </div>
         </form>
+        <ConfirmDialog
+          open={ask}
+          title={t("Send this message?")}
+          body={t("It goes to the desk.")}
+          confirmLabel={fields === "sales" ? t("Talk to sales") : t("Send")}
+          onClose={() => setAsk(false)}
+          onConfirm={send}
+        />
+    </>
   );
 
   if (embedded) return form;

@@ -222,6 +222,10 @@ export function LoginForm() {
             </BusyButton>
           </div>
         </form>
+        <div className="auth-switch">
+          <p>{t("Need an account?")}</p>
+          <Link href="/register">{t("Create account")}</Link>
+        </div>
       </div>
     </div>
   );

@@ -26,6 +26,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<LocaleId>("en");
   const [pack, setPack] = useState<Record<string, string> | null>(null);
   const [translating, setTranslating] = useState(false);
+  const [languageFailed, setLanguageFailed] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem(KEY);
@@ -37,6 +38,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     applyDocument(locale);
     const written = writtenLocale(locale);
+    setLanguageFailed(false);
     if (written === "en") {
       setPack(null);
       setTranslating(false);
@@ -79,6 +81,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       .catch(() => {
         if (controller.signal.aborted) return;
         setTranslating(false);
+        if (!bundled) setLanguageFailed(true);
       });
     return () => controller.abort();
   }, [locale]);
@@ -113,6 +116,11 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       {translating ? (
         <p className="i18n-status" role="status" aria-live="polite">
           {t("Translating")}
+        </p>
+      ) : null}
+      {languageFailed ? (
+        <p className="i18n-status" role="alert">
+          {t("This language could not be loaded.")}
         </p>
       ) : null}
     </I18nContext.Provider>

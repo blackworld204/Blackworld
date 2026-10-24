@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DateSelect } from "@/components/date-select";
 import { CurrencyFlag } from "@/components/currency-flag";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
@@ -25,6 +27,7 @@ export default function StatementPage() {
   const { t, locale } = useI18n();
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [askExport, setAskExport] = useState(false);
   const seeded = useRef(false);
 
   useEffect(() => {
@@ -76,11 +79,11 @@ export default function StatementPage() {
       <div className="statement-range no-print">
         <label className="field">
           <span>{t("From date")}</span>
-          <input type="date" value={from} max={to || undefined} onChange={(event) => setFrom(event.target.value)} />
+          <DateSelect value={from} max={to || undefined} onChange={setFrom} />
         </label>
         <label className="field">
           <span>{t("To date")}</span>
-          <input type="date" value={to} min={from || undefined} onChange={(event) => setTo(event.target.value)} />
+          <DateSelect value={to} min={from || undefined} onChange={setTo} />
         </label>
       </div>
       {period ? <p className="statement-period">{period}</p> : null}
@@ -123,19 +126,28 @@ export default function StatementPage() {
           className="btn btn-ghost"
           type="button"
           disabled={invalid}
-          onClick={() =>
-            downloadCsv("blackworld-statement.csv", [
-              ["From", "To"],
-              [from, to],
-              [],
-              ["Date", "Title", "Detail", "Direction", "Currency", "Amount"],
-              ...txs.map((tx) => [tx.at, tx.title, tx.detail, tx.direction, tx.currency, String(tx.amount)]),
-            ])
-          }
+          onClick={() => setAskExport(true)}
         >
           {t("Export CSV")}
         </button>
       </div>
+      <ConfirmDialog
+        open={askExport}
+        title={t("Export this statement?")}
+        body={t("A CSV file is saved on this device.")}
+        confirmLabel={t("Export")}
+        onClose={() => setAskExport(false)}
+        onConfirm={() => {
+          setAskExport(false);
+          downloadCsv("blackworld-statement.csv", [
+            ["From", "To"],
+            [from, to],
+            [],
+            ["Date", "Title", "Detail", "Direction", "Currency", "Amount"],
+            ...txs.map((tx) => [tx.at, tx.title, tx.detail, tx.direction, tx.currency, String(tx.amount)]),
+          ]);
+        }}
+      />
     </div>
   );
 }

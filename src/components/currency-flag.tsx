@@ -398,6 +398,11 @@ const EXTRA: Record<string, ReactNode> = {
   ),
 };
 
+export function hasCurrencyFlag(code: string) {
+  const key = SHARED[code] ?? code;
+  return Boolean(FLAGS[key] || EXTRA[key] || BANDS[key]);
+}
+
 export function CurrencyFlag({ code }: { code: string }) {
   const key = SHARED[code] ?? code;
   const flag = FLAGS[key] ?? EXTRA[key];

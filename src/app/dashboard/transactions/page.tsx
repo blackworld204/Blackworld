@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { CurrencyFlag } from "@/components/currency-flag";
 import { Glyph } from "@/components/glyph";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
 import { downloadCsv } from "@/lib/csv";
@@ -12,6 +13,7 @@ export default function TransactionsPage() {
   const { state, user } = useAccount();
   const { t, locale } = useI18n();
   const [query, setQuery] = useState("");
+  const [askExport, setAskExport] = useState(false);
   const [direction, setDirection] = useState<"all" | "in" | "out">("all");
   const [currency, setCurrency] = useState<"all" | MoneyCode>("all");
   const [open, setOpen] = useState<string | null>(null);
@@ -79,12 +81,7 @@ export default function TransactionsPage() {
       <button
         className="btn btn-ghost btn-sm"
         type="button"
-        onClick={() =>
-          downloadCsv("blackworld-activity.csv", [
-            ["Date", "Title", "Detail", "Direction", "Currency", "Amount"],
-            ...rows.map((tx) => [tx.at, tx.title, tx.detail, tx.direction, tx.currency, String(tx.amount)]),
-          ])
-        }
+        onClick={() => setAskExport(true)}
       >
         {t("Export CSV")}
       </button>
@@ -119,6 +116,20 @@ export default function TransactionsPage() {
           </li>
         ))}
       </ul>
+      <ConfirmDialog
+        open={askExport}
+        title={t("Export this statement?")}
+        body={t("A CSV file is saved on this device.")}
+        confirmLabel={t("Export")}
+        onClose={() => setAskExport(false)}
+        onConfirm={() => {
+          setAskExport(false);
+          downloadCsv("blackworld-activity.csv", [
+            ["Date", "Title", "Detail", "Direction", "Currency", "Amount"],
+            ...rows.map((tx) => [tx.at, tx.title, tx.detail, tx.direction, tx.currency, String(tx.amount)]),
+          ]);
+        }}
+      />
     </div>
   );
 }

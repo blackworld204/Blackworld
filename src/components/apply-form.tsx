@@ -1,69 +1,129 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { BusyButton } from "@/components/busy-button";
+import { PhoneInput } from "@/components/phone-input";
+import { PasswordStrength } from "@/components/password-strength";
+import { SecretInput } from "@/components/secret-input";
+import { SignOutButton } from "@/components/sign-out-button";
+import { authErrorMessage, useSession } from "@/components/session";
 import { useI18n } from "@/i18n/provider";
-import { REFERRAL_REWARD, earnReferral, money } from "@/lib/bank";
+import { applySchema, collectErrors } from "@/lib/account-schema";
+import { addUser, earnReferral, loadBank, REFERRAL_CODE, userByEmail } from "@/lib/bank";
+import { whenDeskReady } from "@/lib/desk-sync";
+import { firebaseAuth } from "@/lib/firebase";
 
-const audiences = [
-  { id: "fintech", label: "Fintech" },
-  { id: "business", label: "Operating company" },
-  { id: "institution", label: "Institution" },
-];
-
-const products = [
-  { id: "accounts", label: "Accounts" },
-  { id: "cards", label: "Cards" },
-  { id: "payments", label: "Payments" },
-  { id: "full", label: "Full stack" },
-];
-
-function validEmail(value: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
+const empty = {
+  first: "",
+  last: "",
+  email: "",
+  password: "",
+  confirmPassword: "",
+  phone: "",
+  pin: "",
+  confirm: "",
+};
 
 export function ApplyForm() {
-  const [step, setStep] = useState(0);
-  const [audience, setAudience] = useState("fintech");
-  const [company, setCompany] = useState("");
-  const [email, setEmail] = useState("");
-  const [product, setProduct] = useState("full");
-  const [error, setError] = useState("");
-  const [introduced, setIntroduced] = useState("");
-  const reference = useMemo(() => `BW-${Math.floor(100000 + Math.random() * 900000)}`, []);
-  const { t, locale } = useI18n();
+  const router = useRouter();
+  const { session, signUp, signOut } = useSession();
+  const { t } = useI18n();
+  const [form, setForm] = useState(empty);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [referral, setReferral] = useState("");
 
   useEffect(() => {
     const code = new URLSearchParams(window.location.search).get("ref")?.trim().toUpperCase() ?? "";
-    if (/^BW-[A-Z0-9-]{4,24}$/.test(code)) setIntroduced(code);
+    if (REFERRAL_CODE.test(code)) setReferral(code);
   }, []);
 
-  const titles = ["Where should we reply?", "Who should use this?", "Accounts, cards, and payments."];
+  function set<K extends keyof typeof empty>(key: K, value: string) {
+    setForm((current) => ({ ...current, [key]: value }));
+    setErrors((current) => {
+      const related = key === "password" ? "confirmPassword" : key === "pin" ? "confirm" : "";
+      if (!current[key] && !(related && current[related]) && !current._form) return current;
+      const next = { ...current };
+      delete next[key];
+      delete next._form;
+      if (related) delete next[related];
+      return next;
+    });
+  }
 
-  if (step === 3) {
+  function note(key: string) {
+    return errors[key] ? (
+      <p className="form-error" role="alert">
+        {t(errors[key])}
+      </p>
+    ) : null;
+  }
+
+  function finish(event: React.FormEvent) {
+    event.preventDefault();
+    if (busy) return;
+    const found = collectErrors(applySchema, form);
+    setErrors(found);
+    if (Object.keys(found).length > 0) return;
+    openAccount();
+  }
+
+  async function undoSignIn() {
+    const current = firebaseAuth()?.currentUser;
+    if (current) await current.delete().catch(() => {});
+    signOut();
+  }
+
+  function openAccount() {
+    if (busy) return;
+    setBusy(true);
+    const email = form.email.trim();
+    const name = `${form.first.trim()} ${form.last.trim()}`.trim();
+    void (async () => {
+      await signUp(email, form.password);
+      await whenDeskReady();
+      if (userByEmail(loadBank(), email)) {
+        await undoSignIn();
+        setErrors({ _form: "That email already has an account." });
+        return;
+      }
+      const result = addUser({
+        name,
+        email,
+        phone: form.phone.trim(),
+        pin: form.pin,
+        balance: 0,
+        issueCard: false,
+      });
+      if (result.error) {
+        await undoSignIn();
+        setErrors({ _form: result.error });
+        return;
+      }
+      if (referral) earnReferral(referral, name, email);
+      setForm((current) => ({ ...current, password: "", confirmPassword: "" }));
+      router.push("/dashboard");
+    })()
+      .catch((reason: unknown) => {
+        setErrors({ _form: authErrorMessage(reason) });
+      })
+      .finally(() => setBusy(false));
+  }
+
+  if (session) {
     return (
       <div className="page">
         <div className="wrap narrow">
-          <p className="success-mark">{t("Received")}</p>
           <header className="page-intro">
-            <h1>{reference}</h1>
+            <h1>{t("Signed in")}</h1>
           </header>
-          <p>
-            {t("{company} is in review as a {audience}. We'll reply at {email}.", {
-              company,
-              audience: t(audiences.find((item) => item.id === audience)?.label ?? audience),
-              email,
-            })}
-          </p>
-          <p>
-            {t("An administrator opens the account after this application.")}
-          </p>
+          <p>{t("Signed in as {email}.", { email: session.email })}</p>
           <div className="form-row">
-            <Link href="/docs" className="text-button">
-              {t("API documentation")}
-            </Link>
-            <Link href="/" className="btn btn-primary">
-              {t("Home")}
+            <SignOutButton className="text-button" />
+            <Link className="btn btn-primary" href="/dashboard">
+              {t("Open dashboard")}
             </Link>
           </div>
         </div>
@@ -74,127 +134,93 @@ export function ApplyForm() {
   return (
     <div className="page">
       <div className="wrap narrow">
-        <p className="kicker">{t("Step {step} of {total}", { step: step + 1, total: 3 })}</p>
-        <div className="progress" aria-hidden="true">
-          <span style={{ ["--p" as string]: (step + 1) / 3 }} />
-        </div>
         <header className="page-intro">
-          <h1>{t(titles[step])}</h1>
-          {introduced ? (
-            <p className="lede">
-              {t("Referred with {code}.", { code: introduced })}{" "}
-              {t("The referrer earns {amount} when you submit.", {
-                amount: money(REFERRAL_REWARD, "USD", locale),
-              })}
-            </p>
-          ) : null}
+          <h1>{t("Create account")}</h1>
+          {referral ? <p className="lede">{t("Referred with {code}.", { code: referral })}</p> : null}
         </header>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (step === 0) {
-              if (company.trim().length < 2) {
-                setError(t("Enter the company name."));
-                return;
-              }
-              if (!validEmail(email)) {
-                setError(t("Enter a work email."));
-                return;
-              }
-            }
-            setError("");
-            if (step === 2 && introduced) earnReferral(introduced, company, email);
-            setStep((value) => value + 1);
-          }}
-        >
-          {step === 1 ? (
-            <fieldset>
-              <legend className="sr-only">{t("Audience")}</legend>
-              {audiences.map((item) => (
-                <label className="choice" key={item.id}>
-                  <input
-                    type="radio"
-                    name="audience"
-                    value={item.id}
-                    checked={audience === item.id}
-                    onChange={() => setAudience(item.id)}
-                  />
-                  {t(item.label)}
-                </label>
-              ))}
-            </fieldset>
-          ) : null}
-          {step === 0 ? (
-            <>
-              <label className="field">
-                <span>{t("Company")}</span>
-                <input
-                  value={company}
-                  autoComplete="organization"
-                  onChange={(event) => {
-                    setCompany(event.target.value);
-                    setError("");
-                  }}
-                />
-              </label>
-              <label className="field">
-                <span>{t("Work email")}</span>
-                <input
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(event) => {
-                    setEmail(event.target.value);
-                    setError("");
-                  }}
-                />
-              </label>
-            </>
-          ) : null}
-          {step === 2 ? (
-            <fieldset>
-              <legend className="sr-only">{t("Product")}</legend>
-              {products.map((item) => (
-                <label className="choice" key={item.id}>
-                  <input
-                    type="radio"
-                    name="product"
-                    value={item.id}
-                    checked={product === item.id}
-                    onChange={() => setProduct(item.id)}
-                  />
-                  {t(item.label)}
-                </label>
-              ))}
-            </fieldset>
-          ) : null}
-          {error ? (
-            <p className="form-error" role="alert">
-              {error}
-            </p>
-          ) : null}
+        <form onSubmit={finish}>
+          <label className="field">
+            <span>{t("First name")}</span>
+            <input autoComplete="given-name" value={form.first} aria-invalid={Boolean(errors.first)} onChange={(event) => set("first", event.target.value)} />
+            {note("first")}
+          </label>
+          <label className="field">
+            <span>{t("Last name")}</span>
+            <input autoComplete="family-name" value={form.last} aria-invalid={Boolean(errors.last)} onChange={(event) => set("last", event.target.value)} />
+            {note("last")}
+          </label>
+          <label className="field">
+            <span>{t("Email")}</span>
+            <input type="email" autoComplete="email" value={form.email} aria-invalid={Boolean(errors.email)} onChange={(event) => set("email", event.target.value)} />
+            {note("email")}
+          </label>
+          <label className="field">
+            <span>{t("Password")}</span>
+            <SecretInput
+              autoComplete="new-password"
+              value={form.password}
+              invalid={Boolean(errors.password)}
+              showLabel={t("Show password")}
+              hideLabel={t("Hide password")}
+              onChange={(value) => set("password", value)}
+            />
+            <PasswordStrength password={form.password} />
+            {note("password")}
+          </label>
+          <label className="field">
+            <span>{t("Confirm password")}</span>
+            <SecretInput
+              autoComplete="new-password"
+              value={form.confirmPassword}
+              invalid={Boolean(errors.confirmPassword)}
+              showLabel={t("Show password")}
+              hideLabel={t("Hide password")}
+              onChange={(value) => set("confirmPassword", value)}
+            />
+            {note("confirmPassword")}
+          </label>
+          <div className="field">
+            <PhoneInput label={t("Phone")} value={form.phone} invalid={Boolean(errors.phone)} onChange={(value) => set("phone", value)} />
+            {note("phone")}
+          </div>
+          <label className="field">
+            <span>{t("PIN")}</span>
+            <input
+              inputMode="numeric"
+              autoComplete="off"
+              maxLength={4}
+              value={form.pin}
+              aria-invalid={Boolean(errors.pin)}
+              onChange={(event) => set("pin", event.target.value.replace(/\D/g, "").slice(0, 4))}
+            />
+            {note("pin")}
+          </label>
+          <label className="field">
+            <span>{t("Confirm PIN")}</span>
+            <input
+              inputMode="numeric"
+              autoComplete="off"
+              maxLength={4}
+              value={form.confirm}
+              aria-invalid={Boolean(errors.confirm)}
+              onChange={(event) => set("confirm", event.target.value.replace(/\D/g, "").slice(0, 4))}
+            />
+            {note("confirm")}
+          </label>
+          {note("_form")}
           <div className="form-row">
-            {step === 0 ? (
-              <Link href="/" className="text-button">
-                {t("Cancel")}
-              </Link>
-            ) : (
-              <button
-                type="button"
-                className="text-button"
-                onClick={() => {
-                  setError("");
-                  setStep((value) => value - 1);
-                }}
-              >
-                {t("Back")}
-              </button>
-            )}
-            <button className="btn btn-primary" type="submit">
-              {step === 2 ? t("Submit application") : t("Continue")}
-            </button>
+            <Link href="/" className="text-button">
+              {t("Cancel")}
+            </Link>
+            <BusyButton className="btn btn-primary" type="submit" busy={busy}>
+              {t("Create account")}
+            </BusyButton>
           </div>
         </form>
+        <div className="auth-switch">
+          <p>{t("Already registered?")}</p>
+          <Link href="/login">{t("Login")}</Link>
+        </div>
       </div>
     </div>
   );

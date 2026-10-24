@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { BankFields } from "@/components/bank-fields";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DateSelect } from "@/components/date-select";
 import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
@@ -33,6 +34,7 @@ export default function SchedulePage() {
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [drop, setDrop] = useState<{ id: string; holder: string } | null>(null);
+  const [ask, setAsk] = useState(false);
 
   if (!state || !user) return <div className="app-hold" />;
   const rows = state.schedules.filter((item) => item.userId === user.id);
@@ -48,6 +50,14 @@ export default function SchedulePage() {
     if (!Number.isFinite(value) || value <= 0) return setError(t("Enter an amount greater than zero."));
     if (!runOn || runOn < today) return setError(t("Choose today or a later date."));
     if (pin !== user?.pin) return setError(t("PIN does not match this account."));
+    setError("");
+    setAsk(true);
+  }
+
+  function schedule() {
+    if (!user) return;
+    setAsk(false);
+    const value = Number(amount);
     const status = addSchedule({
       userId: user!.id,
       holder: holder.trim(),
@@ -163,7 +173,7 @@ export default function SchedulePage() {
         </div>
         <label className="field">
           <span>{t("Pay on")}</span>
-          <input type="date" min={today} value={runOn} onChange={(event) => setRunOn(event.target.value)} />
+          <DateSelect min={today} value={runOn} onChange={setRunOn} />
         </label>
         <label className="field">
           <span>{t("PIN")}</span>
@@ -185,6 +195,14 @@ export default function SchedulePage() {
           setDrop(null);
           toast(t("Cancelled."));
         }}
+      />
+      <ConfirmDialog
+        open={ask}
+        title={t("Schedule this transfer?")}
+        body={t("It runs on {date}.", { date: runOn })}
+        confirmLabel={t("Schedule")}
+        onClose={() => setAsk(false)}
+        onConfirm={schedule}
       />
     </div>
   );

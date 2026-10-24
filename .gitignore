@@ -3,6 +3,8 @@ node_modules
 .env.local
 .env*.local
 data/i18n-cache
+data/desk.json
+data/inbox.json
 .next
 out
 .DS_Store
