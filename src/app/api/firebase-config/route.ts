@@ -1,3 +1,5 @@
+import { publicFirebaseConfig } from "@/lib/firebase-public";
+
 export const dynamic = "force-dynamic";
 
 function runtimeEnv(suffix: string) {
@@ -27,7 +29,7 @@ export function GET() {
           messagingSenderId: runtimeEnv("FIREBASE_MESSAGING_SENDER_ID") || undefined,
           measurementId: runtimeEnv("FIREBASE_MEASUREMENT_ID") || undefined,
         }
-      : null;
+      : publicFirebaseConfig;
   const body = `self.FIREBASE_WEB_CONFIG=${JSON.stringify(config)};`;
   return new Response(body, {
     headers: {

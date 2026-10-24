@@ -1,6 +1,7 @@
 import { getApp, getApps, initializeApp, type FirebaseApp } from "firebase/app";
 import { createUserWithEmailAndPassword, getAuth, signOut, type Auth } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
+import { publicFirebaseConfig } from "@/lib/firebase-public";
 
 export type FirebaseWebConfig = {
   apiKey: string;
@@ -27,7 +28,7 @@ export function firebaseWebConfig(): FirebaseWebConfig | null {
   const authDomain = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN;
   const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
   const appId = process.env.NEXT_PUBLIC_FIREBASE_APP_ID;
-  if (!apiKey || !authDomain || !projectId || !appId) return null;
+  if (!apiKey || !authDomain || !projectId || !appId) return publicFirebaseConfig;
   return {
     apiKey,
     authDomain,
