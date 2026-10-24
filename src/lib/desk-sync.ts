@@ -51,9 +51,12 @@ export function startDeskSync() {
     const text = JSON.stringify(body);
     if (text === lastWritten) return;
     lastWritten = text;
-    await setDoc(ref, body).catch(() => {
+    try {
+      await setDoc(ref, body);
+    } catch (error) {
       lastWritten = "";
-    });
+      throw error;
+    }
   };
 
   const adoptServer = async (remote: { revision: number; state: BankState }) => {
@@ -102,12 +105,17 @@ export function startDeskSync() {
           const seeded = await sealRemote(loadBank());
           if (seeded?.kind === "conflict") await replaceBank(seeded.state);
         }
-      } else if (remote.status === "missing") {
+      } else if (remote.status === "missing" || remote.status === "offline") {
         const seeded = await sealRemote(loadBank());
         if (seeded?.kind === "saved") await publish(seeded.state);
         else if (seeded?.kind === "conflict") await adoptServer({ revision: seeded.revision, state: seeded.state });
-      } else if (remote.status === "offline") {
-        deskProblem("bw-desk-reach");
+        else {
+          try {
+            await publish(loadBank());
+          } catch {
+            deskProblem(remote.status === "offline" ? "bw-desk-reach" : "bw-desk-save");
+          }
+        }
       }
     })().finally(() => {
       if (stop) return;
@@ -150,9 +158,7 @@ export function startDeskSync() {
   });
 
   const timer = setInterval(() => void pullServer(), 8000);
-  setBankPersist((state) => {
-    void publish(state);
-  });
+  setBankPersist((state) => publish(state));
   return () => {
     stop = true;
     clearInterval(timer);

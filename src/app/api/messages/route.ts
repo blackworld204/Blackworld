@@ -1,6 +1,7 @@
 import { creditReferral, normalizeBank, PRESENTATION_EMAIL } from "@/lib/bank";
 import { CONTACT_EMAIL } from "@/lib/contact";
 import { readDesk, withDeskLock } from "@/lib/desk-store";
+import { withDeskAuth } from "@/lib/firestore-desk";
 import { listInbox, markInboxMailed, saveInboxMessage } from "@/lib/inbox";
 import { sameOrigin, signedEmail } from "@/lib/request-guard";
 import { deliverEvents } from "@/lib/send-hook";
@@ -89,7 +90,9 @@ async function tryMail(input: { name: string; email: string; topic: string; comp
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return Response.json({ error: "forbidden" }, { status: 403 });
   const email = await signedEmail(request);
-  if (email == null || !(await callerIsAdmin(email))) return Response.json({ error: "forbidden" }, { status: 403 });
+  const header = request.headers.get("authorization") ?? "";
+  const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+  if (email == null || !(await withDeskAuth(token, () => callerIsAdmin(email)))) return Response.json({ error: "forbidden" }, { status: 403 });
   const messages = await listInbox();
   return Response.json({ messages }, { headers: { "Cache-Control": "no-store" } });
 }
@@ -128,7 +131,9 @@ export async function POST(request: Request) {
   }
   const referral = text(record.referral, 40).toUpperCase();
   if (/^BW-[A-F0-9]{32}$/.test(referral)) {
-    const credited = await withDeskLock(async (current) => {
+    const header = request.headers.get("authorization") ?? "";
+    const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+    const credited = await withDeskAuth(token, () => withDeskLock(async (current) => {
       if (!current) return { file: null, value: null };
       try {
         const plain = normalizeBank(openState(current.state));
@@ -141,7 +146,7 @@ export async function POST(request: Request) {
       } catch {
         return { file: null, value: null };
       }
-    }).catch(() => null);
+    })).catch(() => null);
     if (credited) await deliverEvents(credited.state, [credited.eventId]).catch(() => 0);
   }
   const origin = request.headers.get("origin") || new URL(request.url).origin;

@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { normalizeBank, type BankState } from "@/lib/bank";
 import { writePlainDesk } from "@/lib/desk-store";
+import { withDeskAuth } from "@/lib/firestore-desk";
 import { sameOrigin, signedIn } from "@/lib/request-guard";
 import { isSealed } from "@/lib/sealed";
 import { verifyTotp } from "@/lib/totp";
@@ -30,7 +31,6 @@ function sameText(left: string, right: string) {
 
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return Response.json({ error: "forbidden" }, { status: 403 });
-  if (!vaultReady()) return Response.json({ error: "unavailable" }, { status: 503 });
   const length = Number(request.headers.get("content-length") ?? 0);
   if (length > 900_000) return Response.json({ error: "invalid" }, { status: 413 });
   let body: unknown;
@@ -42,6 +42,7 @@ export async function POST(request: Request) {
   if (!body || typeof body !== "object") return Response.json({ error: "invalid" }, { status: 400 });
   const record = body as { op?: unknown; state?: BankState; revision?: unknown; sealed?: unknown; pin?: unknown; code?: unknown; codes?: unknown };
   if (record.op === "check-pin" || record.op === "check-code") {
+    if (!vaultReady()) return Response.json({ error: "unavailable" }, { status: 503 });
     if (!allowedPace(request, 5, 15 * 60_000)) return Response.json({ error: "forbidden" }, { status: 429 });
     try {
       if (record.op === "check-pin") {
@@ -64,15 +65,18 @@ export async function POST(request: Request) {
   }
   if (!allowedPace(request, 40, 60_000)) return Response.json({ error: "forbidden" }, { status: 403 });
   if (!(await signedIn(request))) return Response.json({ error: "forbidden" }, { status: 403 });
-  if ((record.op !== "seal" && record.op !== "open") || !record.state || !Array.isArray(record.state.users)) {
+  const state = record.state;
+  if ((record.op !== "seal" && record.op !== "open") || !state || !Array.isArray(state.users)) {
     return Response.json({ error: "invalid" }, { status: 400 });
   }
   try {
     if (record.op === "open") {
-      return Response.json({ state: openState(record.state) }, { headers: { "Cache-Control": "no-store" } });
+      return Response.json({ state: openState(state) }, { headers: { "Cache-Control": "no-store" } });
     }
     const base = typeof record.revision === "number" && Number.isInteger(record.revision) ? record.revision : null;
-    const saved = await writePlainDesk(normalizeBank(record.state), base);
+    const header = request.headers.get("authorization") ?? "";
+    const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+    const saved = await withDeskAuth(token, () => writePlainDesk(normalizeBank(state), base));
     const status = saved.kind === "conflict" ? 409 : 200;
     return Response.json(
       { state: saved.state, revision: saved.revision, conflict: saved.kind === "conflict" },

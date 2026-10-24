@@ -86,6 +86,7 @@ export type BankTx = {
   currency: MoneyCode;
   direction: "in" | "out";
   at: string;
+  ref?: string;
 };
 
 export type BankCard = {
@@ -158,6 +159,7 @@ export type BankApproval = TransferDraft & {
   fee: number;
   status: "pending" | "approved" | "declined";
   at: string;
+  ref?: string;
 };
 
 export type BankEvent = {
@@ -413,10 +415,15 @@ export function saveBank(next: BankState) {
   window.dispatchEvent(new Event(EVENT));
   if (applyingRemote || stateNeedsOpen(clean)) return;
   const serial = ++commitSerial;
-  void sealRemote(clean).then((sealed) => {
+  void sealRemote(clean).then(async (sealed) => {
     if (serial !== commitSerial) return;
     if (!sealed) {
-      deskProblem("bw-desk-save");
+      try {
+        await persistBank?.(clean);
+      } catch {
+        deskProblem("bw-desk-save");
+      }
+      if (!persistBank) deskProblem("bw-desk-save");
       return;
     }
     if (sealed.kind === "conflict") {
@@ -425,7 +432,11 @@ export function saveBank(next: BankState) {
     }
     if (sealed.revision < (currentRevision() ?? sealed.revision)) return;
     localStorage.setItem(KEY, JSON.stringify(sealed.state));
-    persistBank?.(sealed.state);
+    try {
+      await persistBank?.(sealed.state);
+    } catch {
+      deskProblem("bw-desk-save");
+    }
     if (fresh.length) void dispatchHooks(fresh);
   });
 }
@@ -877,6 +888,12 @@ export function transferFee(amount: number) {
   return Math.round(amount * 0.01 * 100) / 100;
 }
 
+export function depositBreakdown(amount: number) {
+  const fee = Math.round(amount * 0.025 * 100) / 100;
+  const credit = Math.round((amount - fee) * 100) / 100;
+  return { fee, credit };
+}
+
 export function payTransfer(userId: string, input: Omit<TransferDraft, "userId">) {
   const detail = `${input.holder} · ${input.bank}${input.note.trim() ? ` · ${input.note.trim()}` : ""}`;
   const fee = transferFee(input.amount);
@@ -931,11 +948,11 @@ export function needsApproval(user: BankUser, total: number) {
   return user.role !== "admin" && total > (user.approvalLimit ?? 10000);
 }
 
-export function addSchedule(input: Omit<BankSchedule, "id" | "status">): BankSchedule["status"] {
+export async function addSchedule(input: Omit<BankSchedule, "id" | "status">): Promise<BankSchedule["status"]> {
   const state = loadBank();
   const row: BankSchedule = { ...input, id: id("sch"), status: "scheduled" };
   saveBank({ ...state, schedules: [row, ...state.schedules] });
-  if (input.runOn <= new Date().toISOString().slice(0, 10)) runDueSchedules(input.userId);
+  if (input.runOn <= new Date().toISOString().slice(0, 10)) await runDueSchedules(input.userId);
   return loadBank().schedules.find((item) => item.id === row.id)?.status ?? "scheduled";
 }
 
@@ -956,40 +973,40 @@ export function cancelSchedule(scheduleId: string) {
   });
 }
 
-function setScheduleStatus(scheduleId: string, status: BankSchedule["status"]) {
-  const state = loadBank();
-  saveBank({
-    ...state,
-    schedules: state.schedules.map((item) => (item.id === scheduleId ? { ...item, status } : item)),
-  });
+function rememberSchedule(item: BankSchedule, status: BankSchedule["status"]) {
+  const current = loadBank();
+  const existing = current.schedules.some((row) => row.id === item.id);
+  const schedules = existing
+    ? current.schedules.map((row) => (row.id === item.id ? { ...row, status } : row))
+    : [{ ...item, status }, ...current.schedules];
+  saveBank({ ...current, schedules });
 }
 
-export function runDueSchedules(userId: string) {
+export async function runDueSchedules(userId: string) {
   const today = new Date().toISOString().slice(0, 10);
   const due = loadBank().schedules.filter(
     (item) => item.userId === userId && item.status === "scheduled" && item.runOn <= today,
   );
+  if (due.length === 0) return;
+  const { postAccount } = await import("@/lib/flow-api");
   for (const item of due) {
-    const user = loadBank().users.find((entry) => entry.id === userId);
-    if (!user) continue;
-    const total = item.amount + transferFee(item.amount);
-    if (needsApproval(user, total)) {
-      addApproval({
-        userId: item.userId,
-        holder: item.holder,
-        bank: item.bank,
-        routing: item.routing,
-        swift: item.swift,
-        account: item.account,
-        note: item.note,
-        amount: item.amount,
-        currency: item.currency,
-      });
-      setScheduleStatus(item.id, "held");
+    const result = await postAccount<{ status?: string }>("payments", {
+      holder: item.holder,
+      bank: item.bank,
+      routing: item.routing,
+      swift: item.swift,
+      account: item.account,
+      note: item.note,
+      amount: item.amount,
+      currency: item.currency,
+      ref: item.id,
+    });
+    if (result.status === 0 || !result.synced) continue;
+    if (result.error) {
+      rememberSchedule(item, "failed");
       continue;
     }
-    const failed = payTransfer(userId, item);
-    setScheduleStatus(item.id, failed ? "failed" : "paid");
+    rememberSchedule(item, result.body?.status === "pending" ? "held" : "paid");
   }
 }
 

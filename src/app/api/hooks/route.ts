@@ -1,5 +1,6 @@
 import { normalizeBank } from "@/lib/bank";
 import { withDeskLock } from "@/lib/desk-store";
+import { withDeskAuth } from "@/lib/firestore-desk";
 import { sameOrigin, signedIn } from "@/lib/request-guard";
 import { deliverEvents } from "@/lib/send-hook";
 import { openState } from "@/lib/vault";
@@ -27,7 +28,9 @@ export async function POST(request: Request) {
   const raw = body && typeof body === "object" && Array.isArray((body as { eventIds?: unknown }).eventIds) ? (body as { eventIds: unknown[] }).eventIds : null;
   const eventIds = raw?.filter((id): id is string => typeof id === "string" && /^[a-z0-9_]{4,80}$/i.test(id)).slice(0, 20) ?? [];
   if (eventIds.length === 0) return Response.json({ error: "invalid" }, { status: 400 });
-  const sent = await withDeskLock(async (current) => {
+  const header = request.headers.get("authorization") ?? "";
+  const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+  const sent = await withDeskAuth(token, () => withDeskLock(async (current) => {
     if (!current) return { file: null, value: 0 };
     try {
       const plain = normalizeBank(openState(current.state));
@@ -35,6 +38,6 @@ export async function POST(request: Request) {
     } catch {
       return { file: null, value: 0 };
     }
-  });
+  }));
   return Response.json({ sent }, { headers: { "Cache-Control": "no-store" } });
 }

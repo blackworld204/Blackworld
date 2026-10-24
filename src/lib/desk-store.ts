@@ -1,8 +1,9 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { BankState } from "@/lib/bank";
+import { deskToken, readFirestoreDesk, writeFirestoreDesk } from "@/lib/firestore-desk";
 import { isSealed } from "@/lib/sealed";
-import { openText, sealState, sealText } from "@/lib/vault";
+import { openState, openText, sealState, sealText } from "@/lib/vault";
 
 type DeskFile = { revision: number; state: BankState };
 type Stored = { revision?: number; state?: BankState; box?: string };
@@ -60,33 +61,65 @@ async function loadLocked(): Promise<DeskFile | null> {
   return file;
 }
 
-export function readDesk() {
-  return lock(loadLocked);
+async function currentDesk() {
+  const token = deskToken();
+  if (token) {
+    const remote = await readFirestoreDesk(token);
+    if (remote) return remote;
+  }
+  return loadLocked();
 }
 
-async function persist(file: DeskFile) {
-  await writeEnvelope(file);
+async function keep(file: DeskFile, plain: BankState) {
+  let filed = false;
+  try {
+    await writeEnvelope(file);
+    filed = true;
+  } catch {
+    filed = false;
+  }
+  const token = deskToken();
+  let fired = false;
+  if (token) {
+    try {
+      const opened = openState(plain);
+      await writeFirestoreDesk(token, { revision: file.revision, state: opened });
+      fired = true;
+    } catch {
+      fired = false;
+    }
+  }
+  if (token ? !fired : !filed) throw new Error("desk");
+}
+
+export function readDesk() {
+  return lock(currentDesk);
 }
 
 /** Saves a plaintext desk. A missing base adopts the file when one already exists. */
 export function writePlainDesk(plain: BankState, base: number | null) {
   return lock(async () => {
-    const current = await loadLocked();
+    const current = await currentDesk();
     if (current && base !== current.revision) {
       return { kind: "conflict" as const, revision: current.revision, state: current.state };
     }
     const revision = (current?.revision ?? 0) + 1;
-    const state = sealState(plain);
-    await persist({ revision, state });
+    let state = plain;
+    try {
+      state = sealState(plain);
+    } catch {
+      state = plain;
+    }
+    await keep({ revision, state }, plain);
     return { kind: "saved" as const, revision, state };
   });
 }
 
 export function withDeskLock<T>(run: (current: DeskFile | null) => Promise<{ file: DeskFile | null; value: T }>) {
   return lock(async () => {
-    const current = await loadLocked();
+    const current = await currentDesk();
     const result = await run(current);
-    if (result.file) await persist(result.file);
+    if (result.file) await keep(result.file, result.file.state);
     return result.value;
   });
 }

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { publicFirebaseConfig } from "@/lib/firebase-public";
 
 const verified = new Map<string, { email: string; exp: number }>();
 const rejected = new Map<string, number>();
@@ -26,7 +27,7 @@ export function sameOrigin(request: Request) {
 
 /** The signed-in email, "" when Firebase is not configured, or null when the token is missing. */
 export async function signedEmail(request: Request) {
-  const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+  const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY || publicFirebaseConfig.apiKey;
   if (!apiKey) return "";
   const header = request.headers.get("authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";

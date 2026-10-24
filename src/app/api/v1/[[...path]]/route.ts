@@ -1,4 +1,6 @@
 import { runAccountCall } from "@/lib/account-api";
+import { withDeskAuth } from "@/lib/firestore-desk";
+import { sameOrigin, signedEmail } from "@/lib/request-guard";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +24,16 @@ function json(request: Request, status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers });
 }
 
+function bearerToken(header: string | null) {
+  if (!header?.startsWith("Bearer ")) return "";
+  return header.slice(7).trim();
+}
+
+function sessionToken(token: string) {
+  const parts = token.split(".");
+  return parts.length === 3 && parts.every((part) => part.length > 0);
+}
+
 async function handle(request: Request, method: string, path: string[]) {
   if (method === "OPTIONS") return new Response(null, { status: 204, headers: cors(request) });
   const length = Number(request.headers.get("content-length") ?? 0);
@@ -31,12 +43,25 @@ async function handle(request: Request, method: string, path: string[]) {
     body = await request.json().catch(() => null);
     if (body === null && Number(request.headers.get("content-length") ?? 0) > 0) return json(request, 400, { error: "invalid" });
   }
-  const result = await runAccountCall({
-    method,
-    path,
-    authorization: request.headers.get("authorization"),
-    body,
-  });
+  const token = bearerToken(request.headers.get("authorization"));
+  let sessionEmail: string | null = null;
+  let authorization = request.headers.get("authorization");
+  if (sessionToken(token)) {
+    if (!sameOrigin(request)) return json(request, 401, { error: "unauthorized" });
+    const email = await signedEmail(request);
+    if (!email) return json(request, 401, { error: "unauthorized" });
+    sessionEmail = email;
+    authorization = null;
+  }
+  const result = await withDeskAuth(token, () =>
+    runAccountCall({
+      method,
+      path,
+      authorization,
+      body,
+      sessionEmail,
+    }),
+  );
   return json(request, result.status, result.body);
 }
 
