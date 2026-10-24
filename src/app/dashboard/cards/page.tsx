@@ -59,12 +59,14 @@ export default function CardsPage() {
     if (!user) return;
     setAskSave(false);
     if (editId) {
+      const current = cards.find((card) => card.id === editId);
       const failed = updateCard(user.id, editId, {
         holder,
         last4,
         expiry,
         kind,
         primary,
+        spendLimit: current?.spendLimit ?? null,
       });
       if (failed) return toast(t(failed));
       toast(t("Card updated."));

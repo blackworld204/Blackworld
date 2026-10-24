@@ -390,6 +390,63 @@ function deposit(
   };
 }
 
+function overCardSpend(
+  state: BankState,
+  userId: string,
+  code: string,
+  amount: number,
+) {
+  if (code !== "USD") return null;
+  const cards = state.cards.filter((card) => card.userId === userId && !card.frozen);
+  const card = cards.find((item) => item.primary) ?? cards[0];
+  if (!card || typeof card.spendLimit !== "number") return null;
+  if (amount <= card.spendLimit + 0.001) return null;
+  return "That is above the card spend limit.";
+}
+
+function runDueSchedules(state: BankState) {
+  const today = new Date().toISOString().slice(0, 10);
+  const due = state.schedules.filter((item) => item.status === "scheduled" && item.runOn <= today);
+  let cursor = state;
+  const eventIds: string[] = [];
+  const results: { id: string; status: string }[] = [];
+  for (const item of due) {
+    const owner = cursor.users.find((user) => user.id === item.userId && user.status === "active");
+    const paid = owner
+      ? pay(cursor, owner, {
+          holder: item.holder,
+          bank: item.bank,
+          routing: item.routing,
+          swift: item.swift,
+          account: item.account,
+          note: item.note,
+          amount: item.amount,
+          currency: item.currency,
+          ref: item.id,
+        })
+      : { error: "Account not found.", status: 404 };
+    const value = !("error" in paid) ? paid.value : null;
+    const pending =
+      !!value &&
+      typeof value === "object" &&
+      "status" in value &&
+      (value as { status?: string }).status === "pending";
+    const status = ("error" in paid ? "failed" : pending ? "held" : "paid") as "failed" | "held" | "paid";
+    const settled =
+      !("error" in paid) && "eventIds" in paid
+        ? (paid as { state: BankState; eventIds: string[]; value: unknown })
+        : null;
+    const next = settled?.state ?? cursor;
+    if (settled) eventIds.push(...settled.eventIds);
+    cursor = {
+      ...next,
+      schedules: next.schedules.map((row) => (row.id === item.id ? { ...row, status } : row)),
+    };
+    results.push({ id: item.id, status });
+  }
+  return { state: cursor, eventIds, value: { schedules: results } };
+}
+
 function exchange(
   state: BankState,
   user: BankUser,
