@@ -80,8 +80,11 @@ function fromValue(value: unknown): unknown {
 }
 
 async function authed(path: string, token: string, init?: RequestInit) {
-  const key = path.includes("?") ? "&" : "?";
-  return fetch(`https://firestore.googleapis.com/v1/${path}${key}key=${apiKey()}`, {
+  // A service-account token must not carry the browser API key. Referrer limits on that key reject the server.
+  const browser = token.split(".").length === 3;
+  const join = path.includes("?") ? "&" : "?";
+  const suffix = browser ? `${join}key=${apiKey()}` : "";
+  return fetch(`https://firestore.googleapis.com/v1/${path}${suffix}`, {
     ...init,
     headers: { ...(init?.headers ?? {}), Authorization: `Bearer ${token}` },
     cache: "no-store",

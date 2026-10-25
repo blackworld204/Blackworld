@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { useSession } from "@/components/session";
-import { hydrateBank, loadBank, subscribeBank, userByEmail, type BankState, type BankUser } from "@/lib/bank";
+import { claimStagedEmail, hydrateBank, loadBank, subscribeBank, userByEmail, type BankState, type BankUser } from "@/lib/bank";
 
 const BankContext = createContext<BankState | null>(null);
 
@@ -15,7 +15,10 @@ export function BankProvider({ children }: { children: React.ReactNode }) {
     const read = () => {
       if (!stop) setState(loadBank());
     };
-    void hydrateBank().then(read);
+    void hydrateBank().then(() => {
+      if (session?.email) claimStagedEmail(session.email);
+      read();
+    });
     const unsub = subscribeBank(read);
     return () => {
       stop = true;

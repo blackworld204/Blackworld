@@ -1,11 +1,66 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Signed-in users can reach the desk because the server uses their token.
-    // The account book is sealed before it is stored, and the browser does not
-    // read desks/presentation itself. Profile photos live in desks/photo_*.
-    match /desks/{deskId} {
-      allow read, write: if request.auth != null;
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isPresentation(data) {
+      return data.keys().hasAll([
+          'users', 'txs', 'cards', 'notes', 'payees',
+          'referrals', 'schedules', 'approvals', 'events'
+        ])
+        && data.keys().hasOnly([
+          'users', 'txs', 'cards', 'notes', 'payees',
+          'referrals', 'schedules', 'approvals', 'events', 'bwRevision'
+        ])
+        && data.users is list
+        && data.txs is list
+        && data.cards is list
+        && data.notes is list
+        && data.payees is list
+        && data.referrals is list
+        && data.schedules is list
+        && data.approvals is list
+        && data.events is list
+        && (!data.keys().hasAny(['bwRevision']) || data.bwRevision is number);
+    }
+
+    function isLive(data) {
+      return data.keys().hasOnly(['items'])
+        && data.items is list
+        && data.items.size() <= 40;
+    }
+
+    function isPhoto(docId) {
+      return docId.matches('^photo_usr_[A-Za-z0-9_-]{1,40}$');
+    }
+
+    match /desks/presentation {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && isPresentation(request.resource.data);
+      allow delete: if false;
+    }
+
+    match /desks/live {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && isLive(request.resource.data);
+      allow delete: if false;
+    }
+
+    // Admin profile pictures. These are not part of the account book.
+    match /desks/{docId} {
+      allow read: if signedIn() && isPhoto(docId);
+      allow create, update: if signedIn()
+        && isPhoto(docId)
+        && request.resource.data.keys().hasOnly(['image'])
+        && request.resource.data.image is string
+        && request.resource.data.image.size() < 180000;
+      allow delete: if signedIn() && isPhoto(docId);
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

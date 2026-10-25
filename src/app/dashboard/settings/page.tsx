@@ -19,6 +19,7 @@ import {
   type BankUser,
   type MoneyCode,
 } from "@/lib/bank";
+import { AccountAccess, EmailVerify } from "@/components/account-access";
 import { AccountPhoto } from "@/components/account-photo";
 import { clearPhoto, photoDataUrl, publishPhoto, savePhoto, withdrawPhoto } from "@/lib/photos";
 import { bindFirebasePush, releaseFirebasePush } from "@/lib/firebase-push";
@@ -342,6 +343,7 @@ function SettingsForm({ user }: { user: BankUser }) {
                 <span>{t("Email address")}</span>
                 <input value={user.email} readOnly />
               </label>
+              <EmailVerify email={user.email} />
               <div className="field">
                 <PhoneInput
                   label={t("Phone number")}
@@ -424,6 +426,7 @@ function SettingsForm({ user }: { user: BankUser }) {
                   {t("Update PIN")}
                 </button>
               </form>
+              <AccountAccess userId={user.id} email={user.email} />
               <label className="choice-line">
                 <input
                   type="checkbox"
@@ -458,6 +461,7 @@ function SettingsForm({ user }: { user: BankUser }) {
           {section === "notifications" ? (
             <div id="alerts">
               {adminDesk ? photoControls : null}
+              {adminDesk ? <AccountAccess userId={user.id} email={user.email} /> : null}
               <h2>{t("Notifications")}</h2>
               <ul className="setting-list">
                 <li>

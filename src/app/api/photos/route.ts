@@ -26,7 +26,7 @@ async function actor(request: Request) {
     (item) => item.status === "active" && !item.email.startsWith("bw1.") && item.email.toLowerCase() === email.toLowerCase(),
   );
   if (!user) return null;
-  return { token, user };
+  return { token, user, plain };
 }
 
 export async function GET(request: Request) {
@@ -36,7 +36,9 @@ export async function GET(request: Request) {
   if (who.user.role !== "admin" && requested !== who.user.id) {
     return Response.json({ error: "forbidden" }, { status: 403 });
   }
-  const image = await readStoredPhoto(who.token, requested).catch(() => null);
+  const stored = await readStoredPhoto(who.token, requested).catch(() => null);
+  const carried = who.plain.users.find((item) => item.id === requested)?.photo;
+  const image = stored || (typeof carried === "string" ? carried : null);
   if (!image || !image.startsWith("data:image/jpeg") || image.length > 180_000) {
     return Response.json({ error: "missing" }, { status: 404 });
   }

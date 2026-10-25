@@ -54,6 +54,8 @@ export type BankUser = {
   photo?: string;
   address?: BankAddress;
   pushTokens?: string[];
+  /** Address waiting on the email-change link. Sign-in claims it once Firebase accepts it. */
+  pendingEmail?: string;
 };
 
 export type BankAddress = {
@@ -296,7 +298,7 @@ export function normalizeBank(parsed: Partial<BankState>): BankState {
       : undefined,
     alerts: { ...DEFAULT_ALERTS, ...user.alerts },
     privacy: { ...DEFAULT_PRIVACY, ...user.privacy },
-    photo: undefined,
+    photo: storedPhoto(user.photo),
     hasPhoto: Boolean(user.hasPhoto) || Boolean(storedPhoto(user.photo)),
     balances: balancesOf(user.balances),
     displayCurrency: user.displayCurrency && isMoneyCode(user.displayCurrency) ? user.displayCurrency : "USD",
@@ -306,6 +308,10 @@ export function normalizeBank(parsed: Partial<BankState>): BankState {
       ? user.pushTokens.filter((token) => typeof token === "string" && token.length > 0).slice(-8)
       : undefined,
     referredBy: referralToken(user.referredBy),
+    pendingEmail:
+      typeof user.pendingEmail === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.pendingEmail)
+        ? user.pendingEmail.toLowerCase()
+        : undefined,
   }));
   const placeholderEmails = new Set(["johnsmith@gmail.com", "jordan.lee@blackworld.com"]);
   const readableMail = (email: string) => (email.startsWith("bw1.") ? "" : email.toLowerCase());
@@ -680,12 +686,88 @@ export function patchUser(userId: string, patch: Partial<BankUser>) {
   delete safe.canCreate;
   delete safe.balances;
   delete safe.email;
+  delete safe.pendingEmail;
   delete safe.id;
   const state = loadBank();
   saveBank({
     ...state,
     users: state.users.map((user) => (user.id === userId ? { ...user, ...safe } : user)),
   });
+}
+
+export function stageEmailChange(userId: string, nextEmail: string) {
+  const next = nextEmail.trim().toLowerCase();
+  const state = loadBank();
+  const owner = state.users.find((user) => user.id === userId);
+  if (!owner) return "Account not found.";
+  if (owner.email.toLowerCase() === next) return "That is already the address on this account.";
+  if (
+    state.users.some(
+      (user) => user.id !== userId && !user.email.startsWith("bw1.") && (user.email.toLowerCase() === next || user.pendingEmail === next),
+    )
+  ) {
+    return "That email already has an account.";
+  }
+  saveBank({
+    ...state,
+    users: state.users.map((user) => (user.id === userId ? { ...user, pendingEmail: next } : user)),
+  });
+  return null;
+}
+
+export function clearStagedEmail(userId: string) {
+  const state = loadBank();
+  saveBank({
+    ...state,
+    users: state.users.map((user) => (user.id === userId ? { ...user, pendingEmail: undefined } : user)),
+  });
+}
+
+/** Moves the desk address after Firebase accepts the change, or claims a staged address. */
+export function changeUserEmail(from: string, to: string) {
+  const next = to.trim().toLowerCase();
+  const prev = from.trim().toLowerCase();
+  if (!next || !prev) return "Enter an email.";
+  const state = loadBank();
+  if (prev === next) {
+    const same = state.users.find((user) => user.email.toLowerCase() === next);
+    if (same?.pendingEmail) {
+      saveBank({
+        ...state,
+        users: state.users.map((user) => (user.id === same.id ? { ...user, pendingEmail: undefined } : user)),
+      });
+    }
+    return null;
+  }
+  const owner = state.users.find((user) => !user.email.startsWith("bw1.") && user.email.toLowerCase() === prev);
+  if (!owner) return "Account not found.";
+  if (state.users.some((user) => user.id !== owner.id && !user.email.startsWith("bw1.") && user.email.toLowerCase() === next)) {
+    return "That email already has an account.";
+  }
+  saveBank({
+    ...state,
+    users: state.users.map((user) => (user.id === owner.id ? { ...user, email: next, pendingEmail: undefined } : user)),
+  });
+  return null;
+}
+
+export function claimStagedEmail(signedInEmail: string) {
+  const email = signedInEmail.trim().toLowerCase();
+  if (!email) return;
+  const state = loadBank();
+  const current = userByEmail(state, email);
+  if (current) {
+    if (current.pendingEmail) {
+      saveBank({
+        ...state,
+        users: state.users.map((user) => (user.id === current.id ? { ...user, pendingEmail: undefined } : user)),
+      });
+    }
+    return;
+  }
+  const staged = state.users.find((user) => user.pendingEmail === email);
+  if (!staged) return;
+  changeUserEmail(staged.email, email);
 }
 
 function actingAdmin(state: BankState, actorId: string) {
@@ -764,7 +846,14 @@ export function addUser(input: {
   issueCard?: boolean;
 }): { error: string | null; last4: string | null } {
   const state = loadBank();
-  if (state.users.some((user) => !user.email.startsWith("bw1.") && user.email.toLowerCase() === input.email.toLowerCase())) {
+  const requested = input.email.toLowerCase();
+  if (
+    state.users.some(
+      (user) =>
+        !user.email.startsWith("bw1.") &&
+        (user.email.toLowerCase() === requested || user.pendingEmail === requested),
+    )
+  ) {
     return { error: "That email already has an account.", last4: null };
   }
   const user: BankUser = {
@@ -1235,7 +1324,7 @@ export function markNote(noteId: string, read: boolean) {
   });
 }
 
-export function addNote(input: { userId: string; title: string; body: string }) {
+export function addNote(input: { userId: string; title: string; body: string; channel?: NoteChannel }) {
   const state = loadBank();
   const note: BankNote = {
     id: id("note"),
@@ -1244,6 +1333,7 @@ export function addNote(input: { userId: string; title: string; body: string }) 
     body: input.body,
     at: new Date().toISOString(),
     read: false,
+    channel: input.channel,
   };
   saveBank({ ...state, notes: [note, ...state.notes] });
   return note;

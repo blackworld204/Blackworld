@@ -8,6 +8,8 @@ import { BusyButton } from "@/components/busy-button";
 import { SignOutButton } from "@/components/sign-out-button";
 import { useI18n } from "@/i18n/provider";
 import { authErrorMessage } from "@/components/session";
+import { signInWithGoogle } from "@/lib/auth-mail";
+import { firebaseAuth } from "@/lib/firebase";
 import { consumeRecoveryCode, hydrateBank, loadBank, userByEmail } from "@/lib/bank";
 import { whenDeskReady } from "@/lib/desk-sync";
 import { isSealed } from "@/lib/sealed";
@@ -16,6 +18,17 @@ import { verifyTotp } from "@/lib/totp";
 
 function validEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function GoogleMark() {
+  return (
+    <svg className="google-mark" viewBox="0 0 18 18" width="18" height="18" aria-hidden="true">
+      <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" />
+      <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" />
+      <path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" />
+      <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" />
+    </svg>
+  );
 }
 
 function EyeIcon() {
@@ -40,7 +53,7 @@ function EyeOffIcon() {
 
 export function LoginForm() {
   const router = useRouter();
-  const { session, signIn } = useSession();
+  const { session, signIn, signOut } = useSession();
   const { t } = useI18n();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -52,6 +65,46 @@ export function LoginForm() {
   const [checks, setChecks] = useState<{ pin: boolean; code: boolean } | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [googleFinish, setGoogleFinish] = useState(false);
+
+  async function continueWithGoogle() {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const user = await signInWithGoogle(true);
+      const mail = user.email?.trim() ?? "";
+      await hydrateBank();
+      const account = mail ? userByEmail(loadBank(), mail) : null;
+      if (!account) {
+        signOut();
+        setError(t("No account for that email."));
+        return;
+      }
+      if (account.status !== "active") {
+        signOut();
+        setError(t("This account is inactive."));
+        return;
+      }
+      const wantsPin = Boolean(account.twoFactor);
+      const wantsCode = Boolean(account.totpSecret);
+      if (wantsPin || wantsCode) {
+        signOut();
+        setEmail(mail);
+        setEmailOpen(true);
+        setChecks({ pin: wantsPin, code: wantsCode });
+        setGoogleFinish(true);
+        return;
+      }
+      await whenDeskReady();
+      router.push("/dashboard");
+    } catch (reason) {
+      signOut();
+      setError(t(authErrorMessage(reason)));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   if (session) {
     return (
@@ -89,7 +142,7 @@ export function LoginForm() {
               setError(t("Enter an email."));
               return;
             }
-            if (password.length < 8) {
+            if (!googleFinish && password.length < 8) {
               setError(t("Password must be at least 8 characters."));
               return;
             }
@@ -128,12 +181,23 @@ export function LoginForm() {
                 setError(t("That code is not valid."));
                 return;
               }
-              await signIn(email.trim(), password);
+              if (googleFinish) {
+                await signInWithGoogle(false);
+                const current = firebaseAuth()?.currentUser?.email ?? "";
+                if (current.toLowerCase() !== email.trim().toLowerCase()) {
+                  signOut();
+                  setError(t("No account for that email."));
+                  return;
+                }
+              } else {
+                await signIn(email.trim(), password);
+              }
               await hydrateBank();
               if (isSealed(account.totpSecret)) consumeRecoveryCode(account.id, code);
               await whenDeskReady();
               router.push("/dashboard");
             })().catch((reason: unknown) => {
+              if (googleFinish) signOut();
               setError(t(authErrorMessage(reason)));
             }).finally(() => setBusy(false));
           }}
@@ -154,6 +218,7 @@ export function LoginForm() {
               }}
               onChange={(event) => {
                 setEmail(event.target.value);
+                setGoogleFinish(false);
                 setChecks(null);
                 setPin("");
                 setCode("");
@@ -161,6 +226,9 @@ export function LoginForm() {
               }}
             />
           </label>
+          {googleFinish ? (
+            <p className="muted">{t("Confirm Google once more after the PIN or code to finish sign-in.")}</p>
+          ) : (
           <label className="field">
             <span>{t("Password")}</span>
             <span className="secret">
@@ -193,6 +261,15 @@ export function LoginForm() {
               </button>
             </span>
           </label>
+          )}
+          {!googleFinish ? (
+            <Link
+              className="text-button auth-forgot"
+              href={validEmail(email) ? `/forgot?email=${encodeURIComponent(email.trim())}` : "/forgot"}
+            >
+              {t("Forgot password?")}
+            </Link>
+          ) : null}
           {checks?.pin ? (
             <label className="field">
               <span>{t("PIN")}</span>
@@ -238,6 +315,15 @@ export function LoginForm() {
             </BusyButton>
           </div>
         </form>
+        {googleFinish ? null : (
+          <>
+            <p className="auth-divider">{t("or")}</p>
+            <BusyButton type="button" className="btn btn-ghost auth-google" busy={busy} onClick={() => void continueWithGoogle()}>
+              <GoogleMark />
+              {t("Continue with Google")}
+            </BusyButton>
+          </>
+        )}
         <div className="auth-switch">
           <p>{t("Need an account?")}</p>
           <Link href="/register">{t("Create account")}</Link>

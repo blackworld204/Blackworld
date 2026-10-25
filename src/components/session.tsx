@@ -3,6 +3,7 @@
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  sendEmailVerification,
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
 } from "firebase/auth";
@@ -14,7 +15,7 @@ import {
   useState,
 } from "react";
 import { expectDeskSync } from "@/lib/desk-sync";
-import { ensureFirebaseAuth, firebaseAuth } from "@/lib/firebase";
+import { authReturnSettings, ensureFirebaseAuth, firebaseAuth } from "@/lib/firebase";
 
 export type Session = { email: string };
 
@@ -38,6 +39,14 @@ export function authErrorMessage(error: unknown) {
   if (code === "auth/too-many-requests") return "Too many attempts. Wait a moment and try again.";
   if (code === "auth/user-disabled") return "This account is inactive.";
   if (code === "auth/operation-not-allowed") return "Email sign-in is not available.";
+  if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") return "Google sign-in was cancelled.";
+  if (code === "auth/popup-blocked") return "Allow pop-ups to sign in with Google.";
+  if (code === "auth/account-exists-with-different-credential") return "That email already uses a password.";
+  if (code === "auth/requires-recent-login") return "Sign in again, then retry this change.";
+  if (code === "auth/invalid-action-code" || code === "auth/expired-action-code") return "This link has expired. Request a new one.";
+  if (code === "auth/invalid-continue-uri" || code === "auth/missing-continue-uri" || code === "auth/unauthorized-continue-uri") {
+    return "This site is not allowed to send that link yet.";
+  }
   if (code === "auth/network-request-failed" || code === "auth/internal-error") return "The sign-in service could not be reached.";
   if (code === "auth/invalid-api-key" || code.startsWith("auth/api-key-not-valid")) return "Sign-in is not available right now.";
   if (code === "auth/unauthorized-domain") return "This site is not allowed to sign in yet.";
@@ -84,7 +93,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         const auth = await ensureFirebaseAuth();
         if (!auth) throw new Error("Sign-in is not available right now.");
         expectDeskSync();
-        await createUserWithEmailAndPassword(auth, email.trim(), password);
+        const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        if (typeof window !== "undefined") {
+          await sendEmailVerification(credential.user, authReturnSettings()).catch(() => {});
+        }
       },
       signOut: () => {
         const auth = firebaseAuth();

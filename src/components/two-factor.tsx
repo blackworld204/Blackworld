@@ -54,13 +54,12 @@ export function TwoFactorPanel() {
   function commitSetup() {
     const next = createRecoveryCodes();
     enableTotp(user!.id, secret, next);
-    if (alertsOf(user!).security) {
-      addNote({
-        userId: user!.id,
-        title: "Authenticator on",
-        body: "Sign-in now asks for a code from an authenticator app.",
-      });
-    }
+    addNote({
+      userId: user!.id,
+      title: "Multi-factor enrollment",
+      body: "An authenticator was added to this account. Sign-in now asks for a code from that app.",
+      channel: "security",
+    });
     setCodes(next);
     setSecret("");
     setCode("");

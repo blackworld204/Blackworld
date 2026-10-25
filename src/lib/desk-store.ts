@@ -75,16 +75,17 @@ async function parkPhotos(state: BankState) {
   const token = deskToken();
   const users = await Promise.all(
     state.users.map(async (user) => {
-      if (!user.photo?.startsWith("data:image/jpeg") || !token) {
+      if (!user.photo?.startsWith("data:image/jpeg")) {
         if (!user.photo) return user;
         const next = { ...user };
         delete next.photo;
         return next;
       }
+      if (!token) return { ...user, hasPhoto: true };
       try {
         await writeStoredPhoto(token, user.id, user.photo);
       } catch {
-        /* The account book still drops the image so the desk can save. */
+        return { ...user, hasPhoto: true };
       }
       const next = { ...user, hasPhoto: true };
       delete next.photo;

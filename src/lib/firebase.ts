@@ -1,5 +1,5 @@
 import { getApp, getApps, initializeApp, type FirebaseApp } from "firebase/app";
-import { createUserWithEmailAndPassword, getAuth, signOut, type Auth } from "firebase/auth";
+import { createUserWithEmailAndPassword, getAuth, sendEmailVerification, signOut, type Auth } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
 import { publicFirebaseConfig } from "@/lib/firebase-public";
 
@@ -72,6 +72,14 @@ export function ensureFirebaseAuth() {
   return ensureFirebaseConfig().then(() => firebaseAuth());
 }
 
+/** Where account emails return after Firebase finishes the link. */
+export function authReturnSettings() {
+  return {
+    url: `${window.location.origin}/login`,
+    handleCodeInApp: false as const,
+  };
+}
+
 export function firebaseApp(): FirebaseApp | null {
   const config = firebaseWebConfig();
   if (!config) return null;
@@ -97,7 +105,10 @@ export async function createPresentationUser(email: string, password: string) {
   const app = existing ?? initializeApp(config, name);
   const auth = getAuth(app);
   try {
-    await createUserWithEmailAndPassword(auth, email.trim(), password);
+    const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+    if (typeof window !== "undefined") {
+      await sendEmailVerification(credential.user, authReturnSettings()).catch(() => {});
+    }
   } finally {
     await signOut(auth).catch(() => {});
   }
