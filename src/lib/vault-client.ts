@@ -24,7 +24,7 @@ export function rememberRevision(next: number) {
   if (revision == null || next > revision) revision = next;
 }
 
-export async function firebaseBearer() {
+export async function firebaseBearer(force = false) {
   const auth = firebaseAuth();
   if (!auth || !firebaseWebConfig()) return "";
   const user =
@@ -36,7 +36,7 @@ export async function firebaseBearer() {
       });
     }));
   if (!user) return null;
-  return user.getIdToken();
+  return user.getIdToken(force);
 }
 
 async function authHeaders(bearer?: string) {
@@ -88,11 +88,9 @@ export type DeskPull =
   | { status: "missing" }
   | { status: "offline" };
 
-export async function pullDesk(bearer?: string): Promise<DeskPull> {
-  const token = bearer !== undefined ? bearer || null : await firebaseBearer();
-  if (token == null) return { status: "offline" };
-  const headers: Record<string, string> = {};
-  if (token) headers.Authorization = `Bearer ${token}`;
+async function readDeskResponse(token: string | null): Promise<DeskPull> {
+  if (!token) return { status: "offline" };
+  const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
   const known = currentRevision();
   const path = known == null ? "/api/desk" : `/api/desk?revision=${known}`;
   const response = await fetch(path, { headers, cache: "no-store" }).catch(() => null);
@@ -103,6 +101,13 @@ export async function pullDesk(bearer?: string): Promise<DeskPull> {
   const data = (await response.json().catch(() => null)) as { revision?: number; state?: BankState } | null;
   if (!data?.state || typeof data.revision !== "number") return { status: "offline" };
   return { status: "updated", revision: data.revision, state: data.state };
+}
+
+export async function pullDesk(bearer?: string): Promise<DeskPull> {
+  if (bearer !== undefined) return readDeskResponse(bearer || null);
+  const first = await readDeskResponse(await firebaseBearer());
+  if (first.status !== "offline") return first;
+  return readDeskResponse(await firebaseBearer(true).catch(() => null));
 }
 
 async function check(body: Record<string, unknown>) {

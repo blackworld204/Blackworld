@@ -7,8 +7,7 @@ import { useI18n } from "@/i18n/provider";
 import { startDeskSync } from "@/lib/desk-sync";
 import { startLiveNotices } from "@/lib/live-notice";
 
-const SAVE = "The desk could not be saved. This browser still has your latest change.";
-const REACH = "The desk could not be reached. Showing the copy on this browser.";
+const SAVE = "The desk could not be saved. Try again.";
 const OPEN = "This desk could not be opened. Try again.";
 
 export function DeskSync() {
@@ -30,15 +29,13 @@ export function DeskSync() {
     const onProblem = (event: Event) => {
       if (seen.has(event.type)) return;
       seen.add(event.type);
-      const text = event.type === "bw-desk-save" ? SAVE : event.type === "bw-desk-reach" ? REACH : OPEN;
+      const text = event.type === "bw-desk-save" ? SAVE : OPEN;
       toast(t(text));
     };
     window.addEventListener("bw-desk-save", onProblem);
-    window.addEventListener("bw-desk-reach", onProblem);
     window.addEventListener("bw-desk-open", onProblem);
     return () => {
       window.removeEventListener("bw-desk-save", onProblem);
-      window.removeEventListener("bw-desk-reach", onProblem);
       window.removeEventListener("bw-desk-open", onProblem);
     };
   }, [t]);

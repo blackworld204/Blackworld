@@ -1,5 +1,5 @@
-import { hydrateBank, loadBank, replaceBank, type BankState } from "@/lib/bank";
-import { currentRevision, pullDesk, rememberRevision, stateNeedsOpen } from "@/lib/vault-client";
+import { hydrateBank, replaceBank, type BankState } from "@/lib/bank";
+import { currentRevision, firebaseBearer, pullDesk, rememberRevision } from "@/lib/vault-client";
 
 let finishReady = () => {};
 let ready: Promise<void> = Promise.resolve();
@@ -12,11 +12,6 @@ export function expectDeskSync() {
 
 export function whenDeskReady() {
   return ready;
-}
-
-function deskProblem(name: string) {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new Event(name));
 }
 
 function newerThan(revision: number) {
@@ -46,11 +41,10 @@ export async function adoptDeskToken(token: string): Promise<"ready" | "offline"
   if (remote.status === "updated") {
     rememberRevision(remote.revision);
     await replaceBank(remote.state, token);
-    return stateNeedsOpen(loadBank()) ? "offline" : "ready";
+    return "ready";
   }
-  if (remote.status === "current") return stateNeedsOpen(loadBank()) ? "offline" : "ready";
-  if (remote.status === "offline") return "offline";
-  return "ready";
+  if (remote.status === "current" || remote.status === "missing") return "ready";
+  return "offline";
 }
 
 export function startDeskSync() {
@@ -69,10 +63,17 @@ export function startDeskSync() {
     pulling = true;
     try {
       const remote = await pullDesk();
-      if (stop || remote.status !== "updated") return;
-      const known = currentRevision();
-      if (known != null && remote.revision <= known) return;
-      await adopt(remote);
+      if (stop) return;
+      if (remote.status === "updated") {
+        const known = currentRevision();
+        if (known != null && remote.revision <= known) return;
+        await adopt(remote);
+        return;
+      }
+      if (remote.status === "missing") {
+        const token = await firebaseBearer();
+        if (token) await claimDeskAccount(token);
+      }
     } finally {
       pulling = false;
     }
@@ -80,14 +81,7 @@ export function startDeskSync() {
 
   void hydrateBank()
     .then(async () => {
-      if (stop) return;
-      const remote = await pullDesk();
-      if (stop) return;
-      if (remote.status === "updated") {
-        await adopt(remote);
-      } else if (remote.status === "offline") {
-        deskProblem("bw-desk-reach");
-      }
+      if (!stop) await pullServer();
     })
     .finally(() => {
       done();

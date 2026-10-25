@@ -20,7 +20,7 @@ function validEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
-const DESK_OFFLINE = "The desk could not be reached. Showing the copy on this browser.";
+const DESK_OFFLINE = "The desk could not be loaded. Try again.";
 
 /** Firebase Authentication already accepted this email. Open or create its Firestore profile. */
 async function accountFromToken(mail: string, token: string) {

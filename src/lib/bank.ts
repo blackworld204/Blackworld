@@ -328,9 +328,8 @@ export function loadBank(): BankState {
 /** The open tab keeps the latest Firebase desk in memory. Nothing is saved in the browser. */
 export function hydrateBank() {
   dropStoredCopy();
-  if (memory && !stateNeedsOpen(memory)) return Promise.resolve(memory);
-  memory = emptyBank();
-  return Promise.resolve(memory);
+  if (memory && memory.users.length > 0 && !stateNeedsOpen(memory)) return Promise.resolve(memory);
+  return Promise.resolve(loadBank());
 }
 
 export function saveBank(next: BankState) {
@@ -386,19 +385,9 @@ function persistMerged(changed: boolean) {
   saveBank(memory);
 }
 
-/** Keeps a notice that was saved on this browser when an older desk copy arrives. */
-function keepRecentNotes(previous: BankState | null, remote: BankState) {
-  const merged = withHeld(remote);
-  if (!previous) return merged;
-  const ids = new Set(merged.notes.map((note) => note.id));
-  const now = Date.now();
-  const extra = previous.notes.filter((note) => {
-    if (ids.has(note.id)) return false;
-    const at = Date.parse(note.at);
-    return Number.isFinite(at) && now - at < 24 * 3600_000;
-  });
-  if (extra.length === 0) return merged;
-  return { ...merged, notes: [...extra, ...merged.notes] };
+/** Notices that arrived from Firebase while this desk copy was loading. */
+function keepRecentNotes(_previous: BankState | null, remote: BankState) {
+  return withHeld(remote);
 }
 
 export async function replaceBank(incoming: BankState, token?: string) {
