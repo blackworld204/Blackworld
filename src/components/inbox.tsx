@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Glyph } from "@/components/glyph";
 import { useSession } from "@/components/session";
@@ -14,8 +14,10 @@ export function Inbox() {
   const { session } = useSession();
   const { t, locale } = useI18n();
   const root = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const seen = useRef<Set<string> | null>(null);
   const [open, setOpen] = useState(false);
+  const [box, setBox] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
   const [ask, setAsk] = useState(false);
   const [notes, setNotes] = useState<BankNote[]>([]);
   const [userId, setUserId] = useState("");
@@ -63,6 +65,63 @@ export function Inbox() {
     return () => window.clearTimeout(timer);
   }, [live]);
 
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const anchor = buttonRef.current;
+      if (!anchor) return;
+      const rect = anchor.getBoundingClientRect();
+      const margin = 12;
+      const vw = document.documentElement.clientWidth;
+      const vh = window.innerHeight;
+      const rtl = document.documentElement.dir === "rtl";
+      let boundStart = margin;
+      let boundEnd = vw - margin;
+      const side = document.querySelector(".app-side");
+      if (side instanceof HTMLElement && getComputedStyle(side).display !== "none") {
+        const sideBox = side.getBoundingClientRect();
+        if (sideBox.width > 8) {
+          if (sideBox.left < vw / 2) boundStart = Math.max(boundStart, sideBox.right + 8);
+          else boundEnd = Math.min(boundEnd, sideBox.left - 8);
+        }
+      }
+      const width = Math.min(380, Math.max(160, boundEnd - boundStart));
+      const aligned = rtl ? rect.left : rect.right - width;
+      const left = Math.round(Math.min(Math.max(aligned, boundStart), boundEnd - width));
+      const top = Math.round(rect.bottom + 8);
+      const maxHeight = Math.round(Math.max(96, vh - top - margin));
+      setBox((current) =>
+        current && current.top === top && current.left === left && current.width === Math.round(width) && current.maxHeight === maxHeight
+          ? current
+          : { top, left, width: Math.round(width), maxHeight },
+      );
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    const bar = document.querySelector(".app-bar");
+    if (!(bar instanceof HTMLElement)) return;
+    const place = () => {
+      const bottom = bar.getBoundingClientRect().bottom;
+      document.documentElement.style.setProperty("--inbox-live-top", `${Math.round(bottom + 8)}px`);
+    };
+    place();
+    const observer = new ResizeObserver(place);
+    observer.observe(bar);
+    window.addEventListener("resize", place);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", place);
+    };
+  }, []);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
@@ -95,6 +154,7 @@ export function Inbox() {
   return (
     <div className="inbox" ref={root}>
       <button
+        ref={buttonRef}
         type="button"
         className="text-button app-bell"
         aria-expanded={open}
@@ -109,7 +169,17 @@ export function Inbox() {
         <span className="app-bell-label">{t("Notifications")}</span>
       </button>
       {open ? (
-        <div id="inbox-panel" className="inbox-panel" role="dialog" aria-label={t("Notifications")}>
+        <div
+          id="inbox-panel"
+          className="inbox-panel"
+          role="dialog"
+          aria-label={t("Notifications")}
+          style={
+            box
+              ? { top: box.top, left: box.left, width: box.width, maxHeight: box.maxHeight }
+              : { visibility: "hidden" }
+          }
+        >
           <div className="inbox-head">
             <strong>{t("Notifications")}</strong>
             {unread > 0 && userId ? (

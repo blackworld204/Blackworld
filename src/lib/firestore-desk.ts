@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { BankState } from "@/lib/bank";
+import { googleAccessToken } from "@/lib/fcm-send";
 import { publicFirebaseConfig } from "@/lib/firebase-public";
 
 export type DeskRecord = { revision: number; state: BankState };
@@ -24,8 +25,17 @@ function apiKey() {
   return publicFirebaseConfig.apiKey;
 }
 
-function docName() {
-  return `projects/${projectId()}/databases/(default)/documents/desks/presentation`;
+function docName(kind: "desks" | "photos", id: string) {
+  return `projects/${projectId()}/databases/(default)/documents/${kind}/${id}`;
+}
+
+const DATASTORE = "https://www.googleapis.com/auth/datastore";
+
+/** Prefers the service account so client rules can deny direct reads. Falls back to the signed-in user. */
+async function bearers(userToken: string) {
+  const admin = await googleAccessToken(DATASTORE).catch(() => null);
+  const list = [admin, userToken].filter((token): token is string => Boolean(token));
+  return [...new Set(list)];
 }
 
 function toValue(value: unknown): Record<string, unknown> {
@@ -69,29 +79,98 @@ function fromValue(value: unknown): unknown {
   return null;
 }
 
-export async function readFirestoreDesk(token: string): Promise<DeskRecord | null> {
-  const response = await fetch(`https://firestore.googleapis.com/v1/${docName()}?key=${apiKey()}`, {
-    headers: { Authorization: `Bearer ${token}` },
+async function authed(path: string, token: string, init?: RequestInit) {
+  const key = path.includes("?") ? "&" : "?";
+  return fetch(`https://firestore.googleapis.com/v1/${path}${key}key=${apiKey()}`, {
+    ...init,
+    headers: { ...(init?.headers ?? {}), Authorization: `Bearer ${token}` },
     cache: "no-store",
-  }).catch(() => null);
-  if (!response?.ok) return null;
-  const body = (await response.json().catch(() => null)) as { fields?: Record<string, unknown> } | null;
-  if (!body?.fields) return null;
-  const data = fromValue({ mapValue: { fields: body.fields } }) as (BankState & { bwRevision?: number }) | null;
-  if (!data?.users) return null;
-  const revision = typeof data.bwRevision === "number" ? data.bwRevision : 0;
-  const { bwRevision: _revision, ...state } = data;
-  return { revision, state: state as BankState };
+  });
+}
+
+export async function readFirestoreDesk(token: string): Promise<DeskRecord | null> {
+  for (const bearer of await bearers(token)) {
+    const response = await authed(docName("desks", "presentation"), bearer).catch(() => null);
+    if (!response?.ok) continue;
+    const body = (await response.json().catch(() => null)) as { fields?: Record<string, unknown> } | null;
+    if (!body?.fields) return null;
+    const data = fromValue({ mapValue: { fields: body.fields } }) as (BankState & { bwRevision?: number }) | null;
+    if (!data?.users) return null;
+    const revision = typeof data.bwRevision === "number" ? data.bwRevision : 0;
+    const { bwRevision: _revision, ...state } = data;
+    return { revision, state: state as BankState };
+  }
+  return null;
 }
 
 export async function writeFirestoreDesk(token: string, desk: DeskRecord) {
   const body = { ...(desk.state as BankState & { bwRevision?: number }), bwRevision: desk.revision };
-  const response = await fetch(`https://firestore.googleapis.com/v1/projects/${projectId()}/databases/(default)/documents:commit?key=${apiKey()}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      writes: [{ update: { name: docName(), fields: (toValue(body) as { mapValue: { fields: unknown } }).mapValue.fields } }],
-    }),
+  const payload = JSON.stringify({
+    writes: [{ update: { name: docName("desks", "presentation"), fields: (toValue(body) as { mapValue: { fields: unknown } }).mapValue.fields } }],
   });
-  if (!response.ok) throw new Error("firestore");
+  let last = 0;
+  for (const bearer of await bearers(token)) {
+    const response = await authed(`projects/${projectId()}/databases/(default)/documents:commit`, bearer, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: payload,
+    }).catch(() => null);
+    if (response?.ok) return;
+    last = response?.status ?? 0;
+    if (last !== 401 && last !== 403) break;
+  }
+  throw new Error("firestore");
+}
+
+function photoId(userId: string) {
+  return /^usr_[A-Za-z0-9_-]{1,40}$/.test(userId) ? `photo_${userId}` : "";
+}
+
+export async function readStoredPhoto(token: string, userId: string) {
+  const id = photoId(userId);
+  if (!id) return null;
+  for (const bearer of await bearers(token)) {
+    const response = await authed(docName("desks", id), bearer).catch(() => null);
+    if (response?.status === 404) return null;
+    if (!response?.ok) continue;
+    const body = (await response.json().catch(() => null)) as { fields?: Record<string, unknown> } | null;
+    const data = body?.fields ? (fromValue({ mapValue: { fields: body.fields } }) as { image?: unknown }) : null;
+    return typeof data?.image === "string" ? data.image : null;
+  }
+  return null;
+}
+
+export async function writeStoredPhoto(token: string, userId: string, image: string) {
+  const id = photoId(userId);
+  if (!id) throw new Error("photo");
+  const fields = (toValue({ image }) as { mapValue: { fields: unknown } }).mapValue.fields;
+  const payload = JSON.stringify({
+    writes: [{ update: { name: docName("desks", id), fields } }],
+  });
+  for (const bearer of await bearers(token)) {
+    const response = await authed(`projects/${projectId()}/databases/(default)/documents:commit`, bearer, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: payload,
+    }).catch(() => null);
+    if (response?.ok) return;
+    if (response && response.status !== 401 && response.status !== 403) break;
+  }
+  throw new Error("photo");
+}
+
+export async function clearStoredPhoto(token: string, userId: string) {
+  const id = photoId(userId);
+  if (!id) throw new Error("photo");
+  const payload = JSON.stringify({ writes: [{ delete: docName("desks", id) }] });
+  for (const bearer of await bearers(token)) {
+    const response = await authed(`projects/${projectId()}/databases/(default)/documents:commit`, bearer, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: payload,
+    }).catch(() => null);
+    if (response?.ok || response?.status === 404) return;
+    if (response && response.status !== 401 && response.status !== 403) break;
+  }
+  throw new Error("photo");
 }

@@ -36,7 +36,7 @@ export default function ApprovalsPage() {
                 {t(item.status === "pending" ? "Pending" : item.status === "approved" ? "Approved" : "Declined")} · {when(item.at, locale)}
               </span>
             </div>
-            <span className="mono">{money(item.amount + item.fee, item.currency, locale)}</span>
+            <span className="mono">{money(item.kind === "deposit" ? Math.max(0, item.amount - item.fee) : item.amount + item.fee, item.currency, locale)}</span>
             {user.role === "admin" && item.status === "pending" ? (
               <div className="user-actions">
                 <button

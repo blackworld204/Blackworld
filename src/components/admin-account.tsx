@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AccountPhoto } from "@/components/account-photo";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CurrencyFlag } from "@/components/currency-flag";
 import { DateSelect } from "@/components/date-select";
@@ -45,15 +46,6 @@ const blankCard: {
   primary: boolean;
   spend: string;
 } = { id: "", holder: "", last4: "", expiry: "", kind: "virtual", primary: false, spend: "" };
-
-function initials(name: string) {
-  const letters = name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "");
-  return letters.join("") || "?";
-}
 
 export function AdminAccount({
   admin,
@@ -206,9 +198,13 @@ export function AdminAccount({
       </button>
       <header className="admin-file-head">
         <div className="admin-file-person">
-          <span className="admin-avatar" aria-hidden="true">
-            {initials(subject.name)}
-          </span>
+          <AccountPhoto
+            userId={subject.id}
+            name={subject.name}
+            photo={subject.photo}
+            hasPhoto={subject.hasPhoto}
+            viewable
+          />
           <div>
             <h2>{subject.name}</h2>
             <p className="admin-file-meta">
@@ -468,7 +464,7 @@ export function AdminAccount({
 
       <section className="admin-section">
         <h3>{t("Approvals")}</h3>
-        {approvals.length === 0 ? <p className="muted">{t("No transfers waiting.")}</p> : null}
+        {approvals.length === 0 ? <p className="muted">{t("Nothing is waiting.")}</p> : null}
         <ul className="tx-list">
           {approvals.map((item) => (
             <li key={item.id}>
@@ -478,7 +474,7 @@ export function AdminAccount({
                   {t(item.status === "pending" ? "Pending" : item.status === "approved" ? "Approved" : "Declined")} · {when(item.at, locale)}
                 </span>
               </div>
-              <span className="mono">{money(item.amount + item.fee, item.currency, locale)}</span>
+              <span className="mono">{money(item.kind === "deposit" ? Math.max(0, item.amount - item.fee) : item.amount + item.fee, item.currency, locale)}</span>
               {item.status === "pending" ? (
                 <div className="user-actions">
                   <button
@@ -490,7 +486,7 @@ export function AdminAccount({
                         id: item.id,
                         approve: true,
                         holder: item.holder,
-                        total: money(item.amount + item.fee, item.currency, locale),
+                        total: money(item.kind === "deposit" ? Math.max(0, item.amount - item.fee) : item.amount + item.fee, item.currency, locale),
                       })
                     }
                   >
@@ -505,7 +501,7 @@ export function AdminAccount({
                         id: item.id,
                         approve: false,
                         holder: item.holder,
-                        total: money(item.amount + item.fee, item.currency, locale),
+                        total: money(item.kind === "deposit" ? Math.max(0, item.amount - item.fee) : item.amount + item.fee, item.currency, locale),
                       })
                     }
                   >

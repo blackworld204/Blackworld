@@ -1,7 +1,8 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { BankState } from "@/lib/bank";
-import { deskToken, readFirestoreDesk, writeFirestoreDesk } from "@/lib/firestore-desk";
+import { mergeMember, scopeDesk } from "@/lib/desk-scope";
+import { deskToken, readFirestoreDesk, writeFirestoreDesk, writeStoredPhoto } from "@/lib/firestore-desk";
 import { isSealed } from "@/lib/sealed";
 import { openState, openText, sealState, sealText } from "@/lib/vault";
 
@@ -70,10 +71,41 @@ async function currentDesk() {
   return loadLocked();
 }
 
-async function keep(file: DeskFile, plain: BankState) {
+async function parkPhotos(state: BankState) {
+  const token = deskToken();
+  const users = await Promise.all(
+    state.users.map(async (user) => {
+      if (!user.photo?.startsWith("data:image/jpeg") || !token) {
+        if (!user.photo) return user;
+        const next = { ...user };
+        delete next.photo;
+        return next;
+      }
+      try {
+        await writeStoredPhoto(token, user.id, user.photo);
+      } catch {
+        /* The account book still drops the image so the desk can save. */
+      }
+      const next = { ...user, hasPhoto: true };
+      delete next.photo;
+      return next;
+    }),
+  );
+  return { ...state, users };
+}
+
+async function keep(file: DeskFile) {
+  const parked = await parkPhotos(openState(file.state));
+  let sealed = parked;
+  try {
+    sealed = sealState(parked);
+  } catch {
+    sealed = parked;
+  }
+  const stored = { revision: file.revision, state: sealed };
   let filed = false;
   try {
-    await writeEnvelope(file);
+    await writeEnvelope(stored);
     filed = true;
   } catch {
     filed = false;
@@ -82,8 +114,7 @@ async function keep(file: DeskFile, plain: BankState) {
   let fired = false;
   if (token) {
     try {
-      const opened = openState(plain);
-      await writeFirestoreDesk(token, { revision: file.revision, state: opened });
+      await writeFirestoreDesk(token, stored);
       fired = true;
     } catch {
       fired = false;
@@ -92,26 +123,45 @@ async function keep(file: DeskFile, plain: BankState) {
   if (token ? !fired : !filed) throw new Error("desk");
 }
 
+function actorOf(state: BankState, email: string) {
+  return state.users.find((user) => !user.email.startsWith("bw1.") && user.email.toLowerCase() === email.toLowerCase());
+}
+
+function forClient(state: BankState, email: string | null) {
+  const view = scopeDesk(state, email);
+  try {
+    return sealState(view);
+  } catch {
+    return view;
+  }
+}
+
 export function readDesk() {
   return lock(currentDesk);
 }
 
-/** Saves a plaintext desk. A missing base adopts the file when one already exists. */
-export function writePlainDesk(plain: BankState, base: number | null) {
+/** Saves a plaintext desk. A member's copy is merged onto the server book. */
+export function writePlainDesk(plain: BankState, base: number | null, actorEmail: string | null = null) {
   return lock(async () => {
     const current = await currentDesk();
-    if (current && base !== current.revision) {
-      return { kind: "conflict" as const, revision: current.revision, state: current.state };
+    const opened = current ? openState(current.state) : null;
+    if (current && opened && base !== current.revision) {
+      return { kind: "conflict" as const, revision: current.revision, state: forClient(opened, actorEmail) };
     }
+    const actor = opened && actorEmail ? actorOf(opened, actorEmail) : null;
+    if (current && opened && actorEmail && !actor) {
+      return { kind: "conflict" as const, revision: current.revision, state: forClient(opened, actorEmail) };
+    }
+    const next = opened && actor && actor.role !== "admin" ? mergeMember(opened, plain, actorEmail ?? "") : plain;
     const revision = (current?.revision ?? 0) + 1;
-    let state = plain;
+    let state = next;
     try {
-      state = sealState(plain);
+      state = sealState(next);
     } catch {
-      state = plain;
+      state = next;
     }
-    await keep({ revision, state }, plain);
-    return { kind: "saved" as const, revision, state };
+    await keep({ revision, state });
+    return { kind: "saved" as const, revision, state: forClient(next, actorEmail) };
   });
 }
 
@@ -119,7 +169,7 @@ export function withDeskLock<T>(run: (current: DeskFile | null) => Promise<{ fil
   return lock(async () => {
     const current = await currentDesk();
     const result = await run(current);
-    if (result.file) await keep(result.file, result.file.state);
+    if (result.file) await keep(result.file);
     return result.value;
   });
 }

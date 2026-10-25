@@ -10,6 +10,19 @@ function storedText(value: unknown) {
   return undefined;
 }
 
+function referralToken(value: unknown) {
+  if (typeof value !== "string" || value.length === 0) return undefined;
+  if (isSealed(value) || /^BW-[A-F0-9]{32}$/.test(value)) return value;
+  return undefined;
+}
+
+function storedPhoto(value: unknown) {
+  if (typeof value !== "string") return undefined;
+  if (!value.startsWith("data:image/jpeg;base64,")) return undefined;
+  if (value.length > 180_000) return undefined;
+  return value;
+}
+
 export type { MoneyCode };
 
 export type BankUser = {
@@ -32,10 +45,13 @@ export type BankUser = {
   approvalLimit?: number;
   totpSecret?: string;
   referralId?: string;
+  /** Referral code used when this account was opened. The reward waits for a deposit. */
+  referredBy?: string;
   recoveryCodes?: string[];
   alerts?: AlertPrefs;
   privacy?: PrivacyPrefs;
   hasPhoto?: boolean;
+  photo?: string;
   address?: BankAddress;
   pushTokens?: string[];
 };
@@ -160,6 +176,8 @@ export type BankApproval = TransferDraft & {
   status: "pending" | "approved" | "declined";
   at: string;
   ref?: string;
+  /** A deposit waits for an admin before any balance changes. */
+  kind?: "transfer" | "deposit";
 };
 
 export type BankEvent = {
@@ -278,7 +296,8 @@ export function normalizeBank(parsed: Partial<BankState>): BankState {
       : undefined,
     alerts: { ...DEFAULT_ALERTS, ...user.alerts },
     privacy: { ...DEFAULT_PRIVACY, ...user.privacy },
-    hasPhoto: Boolean(user.hasPhoto),
+    photo: undefined,
+    hasPhoto: Boolean(user.hasPhoto) || Boolean(storedPhoto(user.photo)),
     balances: balancesOf(user.balances),
     displayCurrency: user.displayCurrency && isMoneyCode(user.displayCurrency) ? user.displayCurrency : "USD",
     approvalLimit: typeof user.approvalLimit === "number" ? user.approvalLimit : 10000,
@@ -286,6 +305,7 @@ export function normalizeBank(parsed: Partial<BankState>): BankState {
     pushTokens: Array.isArray(user.pushTokens)
       ? user.pushTokens.filter((token) => typeof token === "string" && token.length > 0).slice(-8)
       : undefined,
+    referredBy: referralToken(user.referredBy),
   }));
   const placeholderEmails = new Set(["johnsmith@gmail.com", "jordan.lee@blackworld.com"]);
   const readableMail = (email: string) => (email.startsWith("bw1.") ? "" : email.toLowerCase());
@@ -1059,6 +1079,25 @@ export function decideApproval(approvalId: string, actorId: string, approve: boo
     });
     return null;
   }
+  if (row.kind === "deposit") {
+    const net = Math.round((row.amount - row.fee) * 100) / 100;
+    const failed = moveMoney(row.userId, "USD", net, {
+      title: row.holder,
+      detail: `Fee USD ${row.fee.toFixed(2)}`,
+      amount: net,
+      direction: "in",
+    });
+    if (failed) return failed;
+    const payer = loadBank().users.find((user) => user.id === row.userId);
+    const rewarded = payer ? payReferralOnDeposit(loadBank(), payer) : null;
+    if (rewarded) saveBank(rewarded.state);
+    const next = loadBank();
+    saveBank({
+      ...next,
+      approvals: next.approvals.map((item) => (item.id === approvalId ? { ...item, status: "approved" } : item)),
+    });
+    return null;
+  }
   const failed = payTransfer(row.userId, row);
   if (failed) return failed;
   const next = loadBank();
@@ -1347,7 +1386,9 @@ export function creditReferral(state: BankState, code: string, company: string, 
   const at = new Date().toISOString();
   const referrals = existing
     ? state.referrals.map((item) =>
-        item.id === existing.id ? { ...item, company: name, status: "earned" as const, reward: REFERRAL_REWARD } : item,
+        item.id === existing.id
+          ? { ...item, company: existing.company || name, status: "earned" as const, reward: REFERRAL_REWARD }
+          : item,
       )
     : [
         {
@@ -1373,11 +1414,64 @@ export function creditReferral(state: BankState, code: string, company: string, 
   return { state: result.state, eventId };
 }
 
-export function earnReferral(code: string, company: string, email: string) {
-  const next = creditReferral(loadBank(), code, company, email);
-  if (!next) return null;
-  saveBank(next.state);
-  return null;
+/** Records an invite without paying. The reward is credited on the invitee's first deposit. */
+export function attachReferral(state: BankState, code: string, company: string, email: string): BankState | null {
+  const token = code.trim().toUpperCase();
+  if (!REFERRAL_CODE.test(token)) return null;
+  const normalized = email.trim().toLowerCase();
+  if (!normalized || normalized.startsWith("bw1.")) return null;
+  const owner = state.users.find((user) => user.status === "active" && user.referralId?.toUpperCase() === token);
+  if (owner && normalized === owner.email.toLowerCase()) return null;
+  const earned = state.referrals.some(
+    (item) => !item.email.startsWith("bw1.") && item.email.toLowerCase() === normalized && item.status === "earned",
+  );
+  const users = state.users.map((user) =>
+    !user.email.startsWith("bw1.") && user.email.toLowerCase() === normalized && user.referredBy !== token
+      ? { ...user, referredBy: token }
+      : user,
+  );
+  const stamped = users.some((user, index) => user !== state.users[index]);
+  if (!owner || earned) return stamped ? { ...state, users } : null;
+  const existing = state.referrals.find(
+    (item) => item.userId === owner.id && !item.email.startsWith("bw1.") && item.email.toLowerCase() === normalized,
+  );
+  if (existing) return stamped ? { ...state, users } : null;
+  const row: BankReferral = {
+    id: id("ref"),
+    userId: owner.id,
+    company: company.trim() || normalized,
+    email: normalized,
+    at: new Date().toISOString(),
+    status: "invited",
+    reward: 0,
+  };
+  return { ...state, users, referrals: [row, ...state.referrals] };
+}
+
+export function linkReferral(code: string, company: string, email: string) {
+  const next = attachReferral(loadBank(), code, company, email);
+  if (next) saveBank(next);
+}
+
+/** Pays the referrer once, on the invited account's deposit. */
+export function payReferralOnDeposit(state: BankState, depositor: BankUser) {
+  const email = depositor.email.trim().toLowerCase();
+  if (!email || email.startsWith("bw1.")) return null;
+  const code = depositor.referredBy && REFERRAL_CODE.test(depositor.referredBy) ? depositor.referredBy : "";
+  if (code) {
+    const paid = creditReferral(state, code, depositor.name, email);
+    if (paid) return paid;
+    const named = state.users.some((user) => user.referralId?.toUpperCase() === code);
+    if (named) return null;
+  }
+  const pending = state.referrals.find(
+    (item) => item.status === "invited" && !item.email.startsWith("bw1.") && item.email.toLowerCase() === email,
+  );
+  if (!pending) return null;
+  const owner = state.users.find((user) => user.id === pending.userId && user.status === "active");
+  const ownerCode = owner?.referralId?.toUpperCase() ?? "";
+  if (!REFERRAL_CODE.test(ownerCode) || ownerCode === code) return null;
+  return creditReferral(state, ownerCode, pending.company || depositor.name, email);
 }
 
 export function goalOf(user: BankUser, code: MoneyCode, kind: "monthlyLimit" | "savingsTarget") {

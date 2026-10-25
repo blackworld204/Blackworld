@@ -76,19 +76,32 @@ function openWire<T extends { routing: string; swift: string; account: string }>
   return { ...row, routing: openValue(row.routing), swift: openValue(row.swift), account: openValue(row.account) };
 }
 
+function sealBalances(balances: BankUser["balances"]) {
+  if (typeof balances === "string" && isSealed(balances)) return balances;
+  return sealText(JSON.stringify(balances)) as unknown as BankUser["balances"];
+}
+
+function openBalances(balances: BankUser["balances"]) {
+  if (typeof balances === "string" && isSealed(balances)) return JSON.parse(openText(balances)) as BankUser["balances"];
+  return balances;
+}
+
 function sealUser(user: BankUser): BankUser {
   return {
     ...user,
     email: sealEmail(user.email),
     phone: sealValue(user.phone),
     pin: user.pin ? sealText(user.pin) : user.pin,
+    balances: sealBalances(user.balances),
     totpSecret: user.totpSecret ? sealText(user.totpSecret) : undefined,
     apiKey: user.apiKey ? sealText(user.apiKey) : undefined,
     webhookUrl: user.webhookUrl ? sealText(user.webhookUrl) : undefined,
     referralId: user.referralId ? sealText(user.referralId) : undefined,
+    referredBy: user.referredBy ? sealText(user.referredBy) : undefined,
     recoveryCodes: user.recoveryCodes?.map((code) => sealText(code)),
     pushTokens: user.pushTokens?.map((token) => sealText(token)),
     address: sealAddress(user.address),
+    photo: undefined,
   };
 }
 
@@ -98,10 +111,12 @@ function openUser(user: BankUser): BankUser {
     email: openValue(user.email),
     phone: openValue(user.phone),
     pin: user.pin ? openText(user.pin) : user.pin,
+    balances: openBalances(user.balances),
     totpSecret: user.totpSecret ? openText(user.totpSecret) : undefined,
     apiKey: user.apiKey ? openText(user.apiKey) : undefined,
     webhookUrl: user.webhookUrl ? openText(user.webhookUrl) : undefined,
     referralId: user.referralId ? openText(user.referralId) : undefined,
+    referredBy: user.referredBy ? openText(user.referredBy) : undefined,
     recoveryCodes: user.recoveryCodes?.map((code) => openText(code)),
     pushTokens: user.pushTokens?.map((token) => openText(token)),
     address: openAddress(user.address),

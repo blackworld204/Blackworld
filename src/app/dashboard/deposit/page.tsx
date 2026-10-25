@@ -48,14 +48,14 @@ export default function DepositPage() {
     if (busy || !user) return;
     setAsk(false);
     setBusy(true);
-    void postAccount<{ amount?: number }>("deposits", { amount: value, method }).then((result) => {
+    void postAccount<{ amount?: number; status?: string }>("deposits", { amount: value, method }).then((result) => {
+      setBusy(false);
       if (result.error || typeof result.body?.amount !== "number") {
-        setBusy(false);
         setError(t(result.error || "The request failed."));
         return;
       }
       setError("");
-      toast(t("Deposit recorded."));
+      toast(t("Deposit requested."));
       setDone(result.body.amount);
     });
   }
@@ -64,9 +64,9 @@ export default function DepositPage() {
     return (
       <div className="app-pad">
         <header className="app-intro">
-          <p className="kicker">{t("Deposit received")}</p>
+          <p className="kicker">{t("Deposit requested")}</p>
           <h1>{money(done, "USD", locale)}</h1>
-          <p className="lede">{t("The credit is the amount after the 2.5% fee.")}</p>
+          <p className="lede">{t("An admin confirms the funds before this is added to the balance.")}</p>
         </header>
         <Link className="btn btn-primary" href="/dashboard">
           {t("Back to dashboard")}
@@ -81,7 +81,7 @@ export default function DepositPage() {
         <p className="kicker">{t("Deposit")}</p>
         <h1>{t("Add funds")}</h1>
         <p className="lede">
-          {t("A 2.5% fee is taken before the credit.")}
+          {t("A 2.5% fee is taken before the credit. The balance changes after an admin confirms the funds.")}
         </p>
       </header>
       <form className="stack" onSubmit={submit}>
@@ -99,39 +99,21 @@ export default function DepositPage() {
         {method === "wire" ? (
           <dl className="sheet">
             <div>
-              <dt>{t("Beneficiary")}</dt>
-              <dd>{t("Blackworld International")}</dd>
-            </div>
-            <div>
-              <dt>{t("Bank")}</dt>
-              <dd>254 San José Street, San Juan, PR 00901</dd>
-            </div>
-            <div>
-              <dt>{t("Routing")}</dt>
-              <dd className="sheet-value">
-                <span className="mono">021000021</span>
-                <CopyButton value="021000021" label="Copy" />
-              </dd>
-            </div>
-            <div>
-              <dt>{t("Account")}</dt>
-              <dd className="sheet-value">
-                <span className="mono">4481902201</span>
-                <CopyButton value="4481902201" label="Copy" />
-              </dd>
-            </div>
-            <div>
               <dt>{t("Reference")}</dt>
               <dd className="sheet-value">
                 <span className="mono">{user.email}</span>
                 <CopyButton value={user.email} label="Copy" />
               </dd>
             </div>
+            <div>
+              <dt>{t("What happens")}</dt>
+              <dd>{t("Send the wire from your bank, then request it here. Nothing is credited until an admin confirms it.")}</dd>
+            </div>
           </dl>
         ) : (
           <p className="muted">
             {card
-              ? t("Charging the card ending {last4}.", { last4: card.last4 })
+              ? t("This does not charge the card ending {last4}. An admin confirms it first.", { last4: card.last4 })
               : cards.length
                 ? t("Every card on file is frozen.")
                 : t("No card on file yet.")}{" "}
@@ -151,16 +133,16 @@ export default function DepositPage() {
         </p>
         {error ? <p className="form-error">{error}</p> : null}
         <BusyButton className="btn btn-primary" type="submit" busy={busy}>
-          {method === "wire" ? t("Record wire") : t("Record card deposit")}
+          {method === "wire" ? t("Request wire") : t("Request card deposit")}
         </BusyButton>
       </form>
       <ConfirmDialog
         open={ask}
-        title={t("Record this deposit?")}
-        body={t("You receive {credit} after the fee.", {
+        title={t("Request this deposit?")}
+        body={t("You receive {credit} after the fee, once an admin confirms it.", {
           credit: money(Math.max(credit, 0), "USD", locale),
         })}
-        confirmLabel={t("Record deposit")}
+        confirmLabel={t("Request deposit")}
         onClose={() => setAsk(false)}
         onConfirm={record}
       />

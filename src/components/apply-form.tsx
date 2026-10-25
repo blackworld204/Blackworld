@@ -11,7 +11,7 @@ import { SignOutButton } from "@/components/sign-out-button";
 import { authErrorMessage, useSession } from "@/components/session";
 import { useI18n } from "@/i18n/provider";
 import { applySchema, collectErrors } from "@/lib/account-schema";
-import { addUser, earnReferral, loadBank, REFERRAL_CODE, userByEmail } from "@/lib/bank";
+import { addUser, linkReferral, loadBank, REFERRAL_CODE, userByEmail } from "@/lib/bank";
 import { whenDeskReady } from "@/lib/desk-sync";
 import { firebaseAuth } from "@/lib/firebase";
 
@@ -102,7 +102,7 @@ export function ApplyForm() {
         setErrors({ _form: result.error });
         return;
       }
-      if (referral) earnReferral(referral, name, email);
+      if (referral) linkReferral(referral, name, email);
       setForm((current) => ({ ...current, password: "", confirmPassword: "" }));
       router.push("/dashboard");
     })()

@@ -2,7 +2,8 @@ import { timingSafeEqual } from "node:crypto";
 import { normalizeBank, type BankState } from "@/lib/bank";
 import { writePlainDesk } from "@/lib/desk-store";
 import { withDeskAuth } from "@/lib/firestore-desk";
-import { sameOrigin, signedIn } from "@/lib/request-guard";
+import { scopeDesk } from "@/lib/desk-scope";
+import { sameOrigin, signedEmail, signedIn } from "@/lib/request-guard";
 import { isSealed } from "@/lib/sealed";
 import { verifyTotp } from "@/lib/totp";
 import { openState, openText, vaultReady } from "@/lib/vault";
@@ -70,13 +71,14 @@ export async function POST(request: Request) {
     return Response.json({ error: "invalid" }, { status: 400 });
   }
   try {
+    const actorEmail = await signedEmail(request);
     if (record.op === "open") {
-      return Response.json({ state: openState(state) }, { headers: { "Cache-Control": "no-store" } });
+      return Response.json({ state: scopeDesk(openState(state), actorEmail) }, { headers: { "Cache-Control": "no-store" } });
     }
     const base = typeof record.revision === "number" && Number.isInteger(record.revision) ? record.revision : null;
     const header = request.headers.get("authorization") ?? "";
     const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-    const saved = await withDeskAuth(token, () => writePlainDesk(normalizeBank(state), base));
+    const saved = await withDeskAuth(token, () => writePlainDesk(normalizeBank(openState(state)), base, actorEmail));
     const status = saved.kind === "conflict" ? 409 : 200;
     return Response.json(
       { state: saved.state, revision: saved.revision, conflict: saved.kind === "conflict" },

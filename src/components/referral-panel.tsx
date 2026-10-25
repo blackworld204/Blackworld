@@ -57,7 +57,7 @@ export function ReferralPanel() {
     setCompany("");
     setEmail("");
     setError("");
-    toast(t("Referral saved. You earn when they create an account."));
+    toast(t("Referral saved. You earn when they make a deposit."));
   }
 
   return (
@@ -68,7 +68,7 @@ export function ReferralPanel() {
           <h2 id="referrals-title">{t("Earn {amount}", { amount: reward })}</h2>
           <p>
             {t(
-              "Share your code. The credit lands when they create an account.",
+              "Share your code. When an invited account makes a deposit, the credit is added to your account automatically.",
             )}
           </p>
           <div className="refer-code">

@@ -41,8 +41,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setOpen(false);
-    const column = document.querySelector(".app-column");
-    if (column instanceof HTMLElement) column.scrollTop = 0;
+    if (!window.location.hash) {
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      window.dispatchEvent(new CustomEvent("bw-seek", { detail: { top: 0, instant: reduce } }));
+    }
     const nav = document.querySelector(".app-nav");
     const current = nav?.querySelector("[aria-current='page']");
     if (!(nav instanceof HTMLElement) || !(current instanceof HTMLElement)) return;
@@ -93,6 +95,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (access?.admin) {
       return linkItems([
         { href: "/dashboard/admin", label: "Admin" },
+        { href: "/dashboard/team", label: "Team" },
         { href: "/dashboard/settings", label: "Notification settings" },
       ]);
     }

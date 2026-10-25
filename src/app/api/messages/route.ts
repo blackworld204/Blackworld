@@ -1,10 +1,9 @@
-import { creditReferral, normalizeBank, PRESENTATION_EMAIL } from "@/lib/bank";
+import { attachReferral, normalizeBank, PRESENTATION_EMAIL } from "@/lib/bank";
 import { CONTACT_EMAIL } from "@/lib/contact";
 import { readDesk, withDeskLock } from "@/lib/desk-store";
 import { withDeskAuth } from "@/lib/firestore-desk";
 import { listInbox, markInboxMailed, saveInboxMessage } from "@/lib/inbox";
 import { sameOrigin, signedEmail } from "@/lib/request-guard";
-import { deliverEvents } from "@/lib/send-hook";
 import { openState, sealState } from "@/lib/vault";
 
 export const runtime = "nodejs";
@@ -133,21 +132,20 @@ export async function POST(request: Request) {
   if (/^BW-[A-F0-9]{32}$/.test(referral)) {
     const header = request.headers.get("authorization") ?? "";
     const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-    const credited = await withDeskAuth(token, () => withDeskLock(async (current) => {
+    await withDeskAuth(token, () => withDeskLock(async (current) => {
       if (!current) return { file: null, value: null };
       try {
         const plain = normalizeBank(openState(current.state));
-        const next = creditReferral(plain, referral, company, email);
+        const next = attachReferral(plain, referral, company, email);
         if (!next) return { file: null, value: null };
         return {
-          file: { revision: current.revision + 1, state: sealState(next.state) },
-          value: next,
+          file: { revision: current.revision + 1, state: sealState(next) },
+          value: null,
         };
       } catch {
         return { file: null, value: null };
       }
     })).catch(() => null);
-    if (credited) await deliverEvents(credited.state, [credited.eventId]).catch(() => 0);
   }
   const origin = request.headers.get("origin") || new URL(request.url).origin;
   const mailed = await tryMail({ name, email, topic, company, message }, origin, request.headers.get("referer") || `${origin}/support`);

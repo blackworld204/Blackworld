@@ -14,6 +14,7 @@ const ADMIN_ROUTES = [
   "/dashboard/settings",
   "/dashboard/notifications",
   "/dashboard/create",
+  "/dashboard/team",
 ];
 
 function adminRoute(path: string) {

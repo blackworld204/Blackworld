@@ -4,6 +4,7 @@ import {
   depositBreakdown,
   needsApproval,
   normalizeBank,
+  payReferralOnDeposit,
   transferFee,
   type BankApproval,
   type BankCard,
@@ -16,13 +17,14 @@ import {
 import { emptyBalances, isMoneyCode, type MoneyCode } from "@/lib/currencies";
 import { withDeskLock } from "@/lib/desk-store";
 import { quotedRateBook } from "@/lib/rate-hub";
-import {
-  quoteConversion,
-  roundMoney as money,
-  type RateBook,
-} from "@/lib/rates";
+import { quoteConversion, type RateBook } from "@/lib/rates";
 import { deliverEvents } from "@/lib/send-hook";
 import { openState, sealState } from "@/lib/vault";
+
+function money(code: string, value: number) {
+  const factor = code === "JPY" ? 1 : 100;
+  return Math.round(value * factor) / factor;
+}
 
 type Call = {
   method: string;
@@ -372,21 +374,40 @@ function deposit(
     };
   }
   const { fee, credit: received } = depositBreakdown(amount);
-  const detail =
-    method === "wire"
-      ? `Fee USD ${fee.toFixed(2)}`
-      : `Card •••• ${card?.last4 ?? ""} · fee USD ${fee.toFixed(2)}`;
-  const moved = credit(state, user.id, "USD", received, {
-    title: method === "wire" ? "Wire deposit" : "Card deposit",
-    detail,
-    amount: received,
-    direction: "in",
-  });
-  if ("error" in moved) return moved;
+  const at = new Date().toISOString();
+  const holder = method === "wire" ? "Wire deposit" : "Card deposit";
+  const detail = method === "wire" ? `Fee USD ${fee.toFixed(2)}` : `Card •••• ${card?.last4 ?? ""} · fee USD ${fee.toFixed(2)}`;
+  const row: BankApproval = {
+    id: nid("apr"),
+    userId: user.id,
+    holder,
+    bank: "Blackworld",
+    routing: "",
+    swift: "",
+    account: user.email,
+    note: detail,
+    amount,
+    currency: "USD",
+    fee,
+    status: "pending",
+    at,
+    kind: "deposit",
+  };
+  const body = `${holder} · USD ${amount.toFixed(2)}`;
+  const waiting = eventFor(user.id, "Deposit waiting", body, at);
+  const recipients = new Set<string>([user.id, ...state.users.filter((item) => item.role === "admin").map((item) => item.id)]);
+  const notes: BankNote[] = [...recipients].map((userId) => ({
+    id: nid("note"),
+    userId,
+    title: "Deposit waiting",
+    body,
+    at,
+    read: false,
+  }));
   return {
-    state: moved.state,
-    eventIds: [moved.eventId],
-    value: { status: "paid", amount: received, fee, currency: "USD" },
+    state: pushEvent({ ...state, approvals: [row, ...state.approvals], notes: [...notes, ...state.notes] }, waiting),
+    eventIds: [waiting.id],
+    value: { status: "pending", amount: received, fee, currency: "USD" },
   };
 }
 
@@ -525,6 +546,28 @@ function decide(
   const payer = state.users.find((item) => item.id === row.userId);
   if (!payer || payer.status !== "active")
     return { error: "Account not found.", status: 404 };
+  if (row.kind === "deposit") {
+    const net = Math.round((row.amount - row.fee) * 100) / 100;
+    const credited = credit(state, row.userId, "USD", net, {
+      title: row.holder,
+      detail: row.note || `Fee USD ${row.fee.toFixed(2)}`,
+      amount: net,
+      direction: "in",
+    });
+    if ("error" in credited) return credited;
+    const reward = payReferralOnDeposit(credited.state, payer);
+    const next = reward?.state ?? credited.state;
+    return {
+      state: {
+        ...next,
+        approvals: next.approvals.map((item) =>
+          item.id === approvalId ? { ...item, status: "approved" as const } : item,
+        ),
+      },
+      eventIds: reward ? [credited.eventId, reward.eventId] : [credited.eventId],
+      value: { id: row.id, status: "approved" },
+    };
+  }
   const paid = pay(state, payer, { ...row }, { force: true });
   if ("error" in paid) return paid;
   if (!("state" in paid) || !paid.state)

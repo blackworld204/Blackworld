@@ -13,7 +13,7 @@ export type PushDelivery = {
   tokens: string[];
 };
 
-let cached: { token: string; exp: number } | null = null;
+const tokens = new Map<string, { token: string; exp: number }>();
 
 export function pushDeliveryConfigured() {
   return loadAccount() !== null;
@@ -40,14 +40,18 @@ function base64url(value: string) {
   return Buffer.from(value).toString("base64url");
 }
 
-async function accessToken(account: ServiceAccount) {
+/** A Google access token for one scope. Null when no service account is configured. */
+export async function googleAccessToken(scope: string) {
+  const account = loadAccount();
+  if (!account) return null;
   const now = Math.floor(Date.now() / 1000);
-  if (cached && cached.exp - 60 > now) return cached.token;
+  const hit = tokens.get(scope);
+  if (hit && hit.exp - 60 > now) return hit.token;
   const header = base64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
   const claim = base64url(
     JSON.stringify({
       iss: account.client_email,
-      scope: "https://www.googleapis.com/auth/firebase.messaging",
+      scope,
       aud: "https://oauth2.googleapis.com/token",
       iat: now,
       exp: now + 3600,
@@ -68,8 +72,14 @@ async function accessToken(account: ServiceAccount) {
   });
   const data = (await response.json().catch(() => null)) as { access_token?: string; expires_in?: number } | null;
   if (!response.ok || !data?.access_token) throw new Error("push-auth");
-  cached = { token: data.access_token, exp: now + (data.expires_in ?? 3600) };
+  tokens.set(scope, { token: data.access_token, exp: now + (data.expires_in ?? 3600) });
   return data.access_token;
+}
+
+async function accessToken() {
+  const token = await googleAccessToken("https://www.googleapis.com/auth/firebase.messaging");
+  if (!token) throw new Error("push-auth");
+  return token;
 }
 
 async function sendOne(projectId: string, token: string, job: { device: string; title: string; body: string; tag: string }) {
@@ -115,7 +125,7 @@ export async function sendPush(messages: PushDelivery[]) {
   ).slice(0, 100);
   if (jobs.length === 0) return { sent: 0, stale: [] as string[], configured: true };
   const projectId = account.project_id;
-  const token = await accessToken(account);
+  const token = await accessToken();
   const stale: string[] = [];
   let sent = 0;
   let cursor = 0;

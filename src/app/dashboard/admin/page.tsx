@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { AccountPhoto } from "@/components/account-photo";
 import { AdminAccount } from "@/components/admin-account";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { NoticeDialog } from "@/components/notice-dialog";
@@ -11,15 +12,6 @@ import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
 import { MONEY, adjustBalance, forgetPushTokens, money, postAdminNotice, removeMember, setAccountRole, setAccountStatus, setCreateAccess, type BankUser, type MoneyCode } from "@/lib/bank";
 import { deliverPush } from "@/lib/deliver-push";
-
-function initials(name: string) {
-  const letters = name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "");
-  return letters.join("") || "?";
-}
 
 function tone(name: string) {
   const tones = ["#17382c", "#2f6a52", "#6b5a1e", "#3e4d44", "#7a2824"];
@@ -321,16 +313,20 @@ export default function AdminPage() {
                   <tr key={item.id} className="admin-row" onClick={() => setOpenId(item.id)}>
                     <td>
                       <button type="button" className="admin-open" onClick={() => setOpenId(item.id)}>
-                        <span className="admin-avatar" style={{ background: tone(item.name) }} aria-hidden="true">
-                          {initials(item.name)}
-                        </span>
+                        <AccountPhoto
+                          userId={item.id}
+                          name={item.name}
+                          photo={item.photo}
+                          hasPhoto={item.hasPhoto}
+                          style={item.photo || item.hasPhoto ? undefined : { background: tone(item.name) }}
+                        />
                         <span>
                           <strong>{item.name}</strong>
                           <span>{item.email}</span>
                         </span>
                       </button>
                     </td>
-                    <td>
+                    <td data-label={t("Balance")}>
                       <div className="admin-balances">
                         {visibleBalances(item).map((currency) => (
                           <span key={currency.code} className="admin-money">
@@ -340,7 +336,7 @@ export default function AdminPage() {
                         ))}
                       </div>
                     </td>
-                    <td>
+                    <td data-label={t("Status")}>
                       <div className="admin-pills">
                         <span className={item.status === "active" ? "admin-pill is-on" : "admin-pill is-off"}>
                           {item.status === "active" ? t("Active") : t("Inactive")}
@@ -350,12 +346,12 @@ export default function AdminPage() {
                         </span>
                       </div>
                     </td>
-                    <td>
+                    <td data-label={t("Permissions")}>
                       <span className={item.canCreate ? "admin-permit is-yes" : "admin-permit"}>
                         {item.canCreate ? t("Can create") : t("No access")}
                       </span>
                     </td>
-                    <td onClick={(event) => event.stopPropagation()}>
+                    <td data-label={t("Actions")} onClick={(event) => event.stopPropagation()}>
                       <div className="admin-actions">
                         <button
                           type="button"
@@ -683,9 +679,13 @@ function BalanceDialog({
           </button>
         </div>
         <div className="balance-person">
-          <span className="admin-avatar" aria-hidden="true">
-            {initials(subject.name)}
-          </span>
+          <AccountPhoto
+            userId={subject.id}
+            name={subject.name}
+            photo={subject.photo}
+            hasPhoto={subject.hasPhoto}
+            viewable
+          />
           <span>
             <strong>{subject.name}</strong>
             <span>{subject.email}</span>

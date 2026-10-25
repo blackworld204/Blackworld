@@ -3,9 +3,21 @@
 import { useEffect, useRef } from "react";
 import { useSession } from "@/components/session";
 import { useI18n } from "@/i18n/provider";
-import { alertsOf, loadBank, noteIsQuiet, notesFor, subscribeBank, userByEmail } from "@/lib/bank";
+import {
+  alertsOf,
+  loadBank,
+  noteIsQuiet,
+  notesFor,
+  subscribeBank,
+  userByEmail,
+} from "@/lib/bank";
 import { bindFirebasePush } from "@/lib/firebase-push";
-import { noteAllowsPush, pushStatus, registerPushWorker, showPush } from "@/lib/push";
+import {
+  noteAllowsPush,
+  pushStatus,
+  registerPushWorker,
+  showPush,
+} from "@/lib/push";
 
 export function PushBridge() {
   const { session } = useSession();
@@ -31,9 +43,13 @@ export function PushBridge() {
         seen.current = new Set(ids);
         return;
       }
-      const fresh = notes.filter((note) => !note.read && !seen.current?.has(note.id) && !noteIsQuiet(note.id));
+      const fresh = notes.filter(
+        (note) =>
+          !note.read && !seen.current?.has(note.id) && !noteIsQuiet(note.id),
+      );
       for (const note of notes) seen.current.add(note.id);
-      if (!session || !user || pushStatus() !== "on" || fresh.length === 0) return;
+      if (!session || !user || pushStatus() !== "on" || fresh.length === 0)
+        return;
       const alerts = user ? alertsOf(user) : null;
       for (const note of fresh) {
         if (alerts && !noteAllowsPush(note, alerts)) continue;

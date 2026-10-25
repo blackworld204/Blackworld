@@ -19,7 +19,8 @@ import {
   type BankUser,
   type MoneyCode,
 } from "@/lib/bank";
-import { clearPhoto, loadPhoto, savePhoto } from "@/lib/photos";
+import { AccountPhoto } from "@/components/account-photo";
+import { clearPhoto, photoDataUrl, publishPhoto, savePhoto, withdrawPhoto } from "@/lib/photos";
 import { bindFirebasePush, releaseFirebasePush } from "@/lib/firebase-push";
 import {
   disablePush,
@@ -67,7 +68,6 @@ function SettingsForm({ user }: { user: BankUser }) {
   const [first, setFirst] = useState(initial.first);
   const [last, setLast] = useState(initial.last);
   const [phone, setPhone] = useState(user.phone);
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
   const [pinCurrent, setPinCurrent] = useState("");
@@ -96,7 +96,6 @@ function SettingsForm({ user }: { user: BankUser }) {
 
   const alerts = alertsOf(user);
   const privacy = privacyOf(user);
-  const initials = `${first.charAt(0)}${last.charAt(0)}`.toUpperCase() || "BW";
 
   useEffect(() => {
     if (adminDesk) {
@@ -112,27 +111,6 @@ function SettingsForm({ user }: { user: BankUser }) {
     }
     setPush(pushStatus());
   }, [adminDesk]);
-
-  useEffect(() => {
-    let alive = true;
-    let current: string | null = null;
-    if (!user.hasPhoto) {
-      setPhotoUrl(null);
-      return;
-    }
-    loadPhoto(user.id).then((next) => {
-      if (!alive) {
-        if (next) URL.revokeObjectURL(next);
-        return;
-      }
-      current = next;
-      setPhotoUrl(next);
-    });
-    return () => {
-      alive = false;
-      if (current) URL.revokeObjectURL(current);
-    };
-  }, [user.id, user.hasPhoto]);
 
   function openSection(next: Section) {
     setSection(next);
@@ -189,16 +167,24 @@ function SettingsForm({ user }: { user: BankUser }) {
       t("It replaces the photo on this account."),
       t("Use photo"),
       () => {
-        void savePhoto(user.id, file).then(() => {
-          patchUser(user.id, { hasPhoto: true });
-          setSaved(t("Photo updated."));
-        });
+        void photoDataUrl(file)
+          .then(async (photo) => {
+            await savePhoto(user.id, file);
+            await publishPhoto(photo);
+            patchUser(user.id, { hasPhoto: true });
+            setSaved(t("Photo updated."));
+          })
+          .catch(() => {
+            setSaved("");
+            setError(t("Choose an image."));
+          });
       },
     );
   }
 
   async function removePhoto() {
     await clearPhoto(user.id);
+    await withdrawPhoto().catch(() => undefined);
     patchUser(user.id, { hasPhoto: false });
     setSaved(t("Photo removed."));
   }
@@ -261,6 +247,45 @@ function SettingsForm({ user }: { user: BankUser }) {
     URL.revokeObjectURL(url);
   }
 
+  const photoControls = (
+    <>
+      <div className="identity">
+        <AccountPhoto
+          userId={user.id}
+          name={`${first} ${last}`.trim() || user.name}
+          photo={user.photo}
+          hasPhoto={user.hasPhoto}
+          className="avatar"
+          viewable
+        />
+        <div className="identity-actions">
+          <button type="button" className="btn btn-ghost" onClick={() => fileRef.current?.click()}>
+            {t("Change photo")}
+          </button>
+          {user.hasPhoto || user.photo ? (
+            <button type="button" className="text-button" onClick={() => setAskPhoto(true)}>
+              {t("Remove photo")}
+            </button>
+          ) : null}
+          <input ref={fileRef} className="sr-only" type="file" accept="image/*" onChange={onPhoto} />
+        </div>
+      </div>
+      {adminDesk && error ? <p className="form-error">{error}</p> : null}
+      {adminDesk && saved ? <p>{saved}</p> : null}
+      <ConfirmDialog
+        open={askPhoto}
+        title={t("Remove this photo?")}
+        body={t("The profile photo will be removed.")}
+        confirmLabel={t("Remove photo")}
+        onClose={() => setAskPhoto(false)}
+        onConfirm={() => {
+          setAskPhoto(false);
+          void removePhoto();
+        }}
+      />
+    </>
+  );
+
   return (
     <div className="app-pad">
       <header className="app-intro">
@@ -294,40 +319,7 @@ function SettingsForm({ user }: { user: BankUser }) {
           {section === "profile" ? (
             <form onSubmit={saveProfile}>
               <h2>{t("Personal information")}</h2>
-              <div className="identity">
-                <div className="avatar" aria-hidden="true">
-                  {photoUrl ? (
-                    <img src={photoUrl} alt="" />
-                  ) : (
-                    <span>{initials}</span>
-                  )}
-                </div>
-                <div className="identity-actions">
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    onClick={() => fileRef.current?.click()}
-                  >
-                    {t("Change photo")}
-                  </button>
-                  {user.hasPhoto ? (
-                    <button
-                      type="button"
-                      className="text-button"
-                      onClick={() => setAskPhoto(true)}
-                    >
-                      {t("Remove photo")}
-                    </button>
-                  ) : null}
-                  <input
-                    ref={fileRef}
-                    className="sr-only"
-                    type="file"
-                    accept="image/*"
-                    onChange={onPhoto}
-                  />
-                </div>
-              </div>
+              {photoControls}
               <div className="split">
                 <label className="field">
                   <span>{t("First name")}</span>
@@ -362,17 +354,6 @@ function SettingsForm({ user }: { user: BankUser }) {
               <button className="btn btn-primary" type="submit">
                 {t("Save profile")}
               </button>
-              <ConfirmDialog
-                open={askPhoto}
-                title={t("Remove this photo?")}
-                body={t("The profile photo will be removed.")}
-                confirmLabel={t("Remove photo")}
-                onClose={() => setAskPhoto(false)}
-                onConfirm={() => {
-                  setAskPhoto(false);
-                  void removePhoto();
-                }}
-              />
 
               <h2>{t("Language")}</h2>
               <LanguageSelect variant="list" />
@@ -476,6 +457,7 @@ function SettingsForm({ user }: { user: BankUser }) {
 
           {section === "notifications" ? (
             <div id="alerts">
+              {adminDesk ? photoControls : null}
               <h2>{t("Notifications")}</h2>
               <ul className="setting-list">
                 <li>
