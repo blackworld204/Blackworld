@@ -21,7 +21,7 @@ async function emailFromIdToken(token: string) {
   const parts = token.split(".");
   if (parts.length !== 3) return null;
   let header: { alg?: string; kid?: string };
-  let payload: { aud?: string; iss?: string; exp?: number; email?: string };
+  let payload: { aud?: string; iss?: string; exp?: number; email?: string; firebase?: { identities?: { email?: string[] } } };
   try {
     header = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8")) as { alg?: string; kid?: string };
     payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")) as {
@@ -29,22 +29,27 @@ async function emailFromIdToken(token: string) {
       iss?: string;
       exp?: number;
       email?: string;
+      firebase?: { identities?: { email?: string[] } };
     };
   } catch {
     return null;
   }
-  const projectId = publicFirebaseConfig.projectId;
+  const projects = [publicFirebaseConfig.projectId, process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID].filter(
+    (id): id is string => Boolean(id),
+  );
   if (header.alg !== "RS256" || !header.kid) return null;
-  if (payload.aud !== projectId || payload.iss !== `https://securetoken.google.com/${projectId}`) return null;
+  if (!payload.aud || !projects.includes(payload.aud) || payload.iss !== `https://securetoken.google.com/${payload.aud}`) return null;
   if (typeof payload.exp !== "number" || payload.exp * 1000 < Date.now() - 60_000) return null;
-  if (typeof payload.email !== "string" || !payload.email.includes("@")) return null;
+  const identity = payload.firebase?.identities?.email?.find((item) => item.includes("@"));
+  const email = typeof payload.email === "string" && payload.email.includes("@") ? payload.email : identity;
+  if (!email) return null;
   const pem = (await firebaseCerts())[header.kid];
   if (!pem) return null;
   const verifier = createVerify("RSA-SHA256");
   verifier.update(`${parts[0]}.${parts[1]}`);
   verifier.end();
   if (!verifier.verify(createPublicKey(pem), parts[2], "base64url")) return null;
-  return payload.email;
+  return email;
 }
 
 export function sameOrigin(request: Request) {

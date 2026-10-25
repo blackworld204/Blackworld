@@ -1,5 +1,7 @@
 import { onAuthStateChanged, type User } from "firebase/auth";
 import type { BankState } from "@/lib/bank";
+import { publicFirebaseConfig } from "@/lib/firebase-public";
+import { deskFromDocument } from "@/lib/firestore-value";
 import { firebaseAuth, firebaseWebConfig } from "@/lib/firebase";
 import { isSealed } from "@/lib/sealed";
 
@@ -103,11 +105,34 @@ async function readDeskResponse(token: string | null): Promise<DeskPull> {
   return { status: "updated", revision: data.revision, state: data.state };
 }
 
+/** The browser reads the desk itself when the server cannot. Rules still require this signed-in token. */
+async function readBrowserDesk(token: string): Promise<DeskPull> {
+  const url = `https://firestore.googleapis.com/v1/projects/${publicFirebaseConfig.projectId}/databases/(default)/documents/desks/presentation?key=${publicFirebaseConfig.apiKey}`;
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  }).catch(() => null);
+  if (response?.status === 404) return { status: "missing" };
+  if (!response?.ok) return { status: "offline" };
+  const body = (await response.json().catch(() => null)) as { fields?: Record<string, unknown> } | null;
+  const desk = deskFromDocument(body);
+  if (!desk) return { status: "missing" };
+  return { status: "updated", revision: desk.revision, state: desk.state };
+}
+
+async function readDesk(token: string | null): Promise<DeskPull> {
+  const remote = await readDeskResponse(token);
+  if (remote.status === "updated" || remote.status === "current" || !token) return remote;
+  const direct = await readBrowserDesk(token);
+  if (direct.status === "updated") return direct;
+  return remote.status === "missing" ? remote : direct.status === "missing" ? direct : remote;
+}
+
 export async function pullDesk(bearer?: string): Promise<DeskPull> {
-  if (bearer !== undefined) return readDeskResponse(bearer || null);
-  const first = await readDeskResponse(await firebaseBearer());
+  if (bearer !== undefined) return readDesk(bearer || null);
+  const first = await readDesk(await firebaseBearer());
   if (first.status !== "offline") return first;
-  return readDeskResponse(await firebaseBearer(true).catch(() => null));
+  return readDesk(await firebaseBearer(true).catch(() => null));
 }
 
 async function check(body: Record<string, unknown>) {

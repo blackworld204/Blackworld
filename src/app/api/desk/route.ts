@@ -2,7 +2,7 @@ import { scopeDesk } from "@/lib/desk-scope";
 import { ensureDeskUser, readDesk } from "@/lib/desk-store";
 import { withDeskAuth } from "@/lib/firestore-desk";
 import { sameOrigin, signedEmail, signedIn } from "@/lib/request-guard";
-import { openState, sealState } from "@/lib/vault";
+import { openState } from "@/lib/vault";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,14 +23,9 @@ export async function GET(request: Request) {
   try {
     plain = openState(desk.state);
   } catch {
-    return Response.json({ error: "missing" }, { status: 404 });
+    return Response.json({ error: "locked" }, { status: 503 });
   }
-  let view = scopeDesk(plain, email);
-  try {
-    view = sealState(view);
-  } catch {
-    /* Without an encryption key the desk stays readable only to this signed-in response. */
-  }
+  const view = scopeDesk(plain, email);
   return Response.json({ revision: desk.revision, state: view }, { headers: { "Cache-Control": "no-store" } });
 }
 

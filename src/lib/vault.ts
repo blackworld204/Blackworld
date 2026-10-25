@@ -25,9 +25,9 @@ export function sealText(plain: string) {
 }
 
 export function openText(sealed: string) {
+  if (!isSealed(sealed)) return sealed;
   const key = keyBytes();
   if (!key) throw new Error("missing-key");
-  if (!isSealed(sealed)) return sealed;
   const [version, iv, tag, body] = sealed.split(".");
   if (version !== "bw1" || !iv || !tag || !body) throw new Error("sealed");
   const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(iv, "base64url"));

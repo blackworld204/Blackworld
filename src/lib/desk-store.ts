@@ -3,6 +3,7 @@ import { emptyBank, type BankState, type BankUser } from "@/lib/bank";
 import { emptyBalances } from "@/lib/currencies";
 import { mergeMember, scopeDesk } from "@/lib/desk-scope";
 import { deskToken, readFirestoreDesk, writeFirestoreDesk, writeStoredPhoto } from "@/lib/firestore-desk";
+import { isSealed } from "@/lib/sealed";
 import { openState, sealState } from "@/lib/vault";
 
 type DeskFile = { revision: number; state: BankState };
@@ -85,12 +86,11 @@ function profileFor(email: string): BankUser {
 }
 
 function forClient(state: BankState, email: string | null) {
-  const view = scopeDesk(state, email);
-  try {
-    return sealState(view);
-  } catch {
-    return view;
-  }
+  return scopeDesk(state, email);
+}
+
+function locked(state: BankState) {
+  return state.users.some((user) => isSealed(user.email));
 }
 
 export function readDesk() {
@@ -128,6 +128,7 @@ export function ensureDeskUser(email: string) {
     if (current && opened.users.some((user) => sameMail(user, mail))) {
       return { revision: current.revision, state: forClient(opened, mail) };
     }
+    if (current && locked(opened)) return null;
     const user = profileFor(mail);
     const next = { ...opened, users: [user, ...opened.users] };
     const revision = (current?.revision ?? 0) + 1;
@@ -147,6 +148,7 @@ export function writePlainDesk(plain: BankState, base: number | null, actorEmail
   return lock(async () => {
     const current = await currentDesk();
     const opened = current ? openState(current.state) : null;
+    if (opened && locked(opened)) throw new Error("locked");
     if (current && opened && base !== current.revision) {
       return { kind: "conflict" as const, revision: current.revision, state: forClient(opened, actorEmail) };
     }

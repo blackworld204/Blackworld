@@ -96,9 +96,9 @@ export async function readFirestoreDesk(token: string): Promise<DeskRecord | nul
     const response = await authed(docName("desks", "presentation"), bearer).catch(() => null);
     if (!response?.ok) continue;
     const body = (await response.json().catch(() => null)) as { fields?: Record<string, unknown> } | null;
-    if (!body?.fields) return null;
+    if (!body?.fields) continue;
     const data = fromValue({ mapValue: { fields: body.fields } }) as (BankState & { bwRevision?: number }) | null;
-    if (!data?.users) return null;
+    if (!data?.users) continue;
     const revision = typeof data.bwRevision === "number" ? data.bwRevision : 0;
     const { bwRevision: _revision, ...state } = data;
     return { revision, state: state as BankState };
