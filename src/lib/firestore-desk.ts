@@ -162,6 +162,41 @@ export async function writeStoredPhoto(token: string, userId: string, image: str
   throw new Error("photo");
 }
 
+export async function readFirestoreBox(id: string) {
+  const tokens = await bearers(deskToken());
+  if (tokens.length === 0) throw new Error("firestore");
+  for (const token of tokens) {
+    const response = await authed(docName("desks", id), token).catch(() => null);
+    if (response?.status === 404) return "";
+    if (!response?.ok) continue;
+    const body = (await response.json().catch(() => null)) as { fields?: Record<string, unknown> } | null;
+    const data = body?.fields ? (fromValue({ mapValue: { fields: body.fields } }) as { box?: unknown }) : null;
+    return typeof data?.box === "string" ? data.box : "";
+  }
+  throw new Error("firestore");
+}
+
+export async function writeFirestoreBox(id: string, box: string) {
+  const tokens = await bearers(deskToken());
+  if (tokens.length === 0) throw new Error("firestore");
+  const fields = (toValue({ box }) as { mapValue: { fields: unknown } }).mapValue.fields;
+  const payload = JSON.stringify({
+    writes: [{ update: { name: docName("desks", id), fields } }],
+  });
+  let last = 0;
+  for (const token of tokens) {
+    const response = await authed(`projects/${projectId()}/databases/(default)/documents:commit`, token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: payload,
+    }).catch(() => null);
+    if (response?.ok) return;
+    last = response?.status ?? 0;
+    if (last !== 401 && last !== 403) break;
+  }
+  throw new Error("firestore");
+}
+
 export async function clearStoredPhoto(token: string, userId: string) {
   const id = photoId(userId);
   if (!id) throw new Error("photo");

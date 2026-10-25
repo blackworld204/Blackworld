@@ -1,4 +1,4 @@
-import { attachReferral, normalizeBank, PRESENTATION_EMAIL } from "@/lib/bank";
+import { attachReferral, normalizeBank } from "@/lib/bank";
 import { CONTACT_EMAIL } from "@/lib/contact";
 import { readDesk, withDeskLock } from "@/lib/desk-store";
 import { withDeskAuth } from "@/lib/firestore-desk";
@@ -50,7 +50,7 @@ function pace(key: string, limit: number, windowMs: number) {
 async function callerIsAdmin(email: string) {
   if (!email) return false;
   const desk = await readDesk();
-  if (!desk) return email.toLowerCase() === PRESENTATION_EMAIL.toLowerCase();
+  if (!desk) return false;
   try {
     const plain = normalizeBank(openState(desk.state));
     const user = plain.users.find((item) => item.email.toLowerCase() === email.toLowerCase());
@@ -92,7 +92,7 @@ export async function GET(request: Request) {
   const header = request.headers.get("authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
   if (email == null || !(await withDeskAuth(token, () => callerIsAdmin(email)))) return Response.json({ error: "forbidden" }, { status: 403 });
-  const messages = await listInbox();
+  const messages = await withDeskAuth(token, () => listInbox());
   return Response.json({ messages }, { headers: { "Cache-Control": "no-store" } });
 }
 
@@ -122,11 +122,11 @@ export async function POST(request: Request) {
     return Response.json({ error: "forbidden" }, { status: 429 });
   }
 
-  let saved;
+  let saved: Awaited<ReturnType<typeof saveInboxMessage>> | null = null;
   try {
     saved = await saveInboxMessage({ name, email, topic, company, message });
   } catch {
-    return Response.json({ error: "failed" }, { status: 502 });
+    saved = null;
   }
   const referral = text(record.referral, 40).toUpperCase();
   if (/^BW-[A-F0-9]{32}$/.test(referral)) {
@@ -149,6 +149,7 @@ export async function POST(request: Request) {
   }
   const origin = request.headers.get("origin") || new URL(request.url).origin;
   const mailed = await tryMail({ name, email, topic, company, message }, origin, request.headers.get("referer") || `${origin}/support`);
-  if (mailed) await markInboxMailed(saved.id).catch(() => undefined);
+  if (saved && mailed) await markInboxMailed(saved.id).catch(() => undefined);
+  if (!saved && !mailed) return Response.json({ error: "failed" }, { status: 502 });
   return Response.json({ ok: true });
 }

@@ -91,6 +91,16 @@ export function firebaseAuth(): Auth | null {
   return app ? getAuth(app) : null;
 }
 
+/** A second Firebase app. Signing in here leaves the desk session signed out. */
+export async function namedFirebaseAuth(name: string) {
+  await ensureFirebaseConfig();
+  const config = firebaseWebConfig();
+  if (!config) throw new Error("Sign-in is not available right now.");
+  const existing = getApps().find((app) => app.name === name);
+  const app = existing ?? initializeApp(config, name);
+  return getAuth(app);
+}
+
 export function firebaseDb(): Firestore | null {
   const app = firebaseApp();
   return app ? getFirestore(app) : null;

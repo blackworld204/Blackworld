@@ -3,6 +3,8 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { useSession } from "@/components/session";
 import { claimStagedEmail, hydrateBank, loadBank, subscribeBank, userByEmail, type BankState, type BankUser } from "@/lib/bank";
+import { claimDeskAccount } from "@/lib/desk-sync";
+import { firebaseBearer } from "@/lib/vault-client";
 
 const BankContext = createContext<BankState | null>(null);
 
@@ -15,8 +17,15 @@ export function BankProvider({ children }: { children: React.ReactNode }) {
     const read = () => {
       if (!stop) setState(loadBank());
     };
-    void hydrateBank().then(() => {
-      if (session?.email) claimStagedEmail(session.email);
+    void hydrateBank().then(async () => {
+      if (session?.email) {
+        claimStagedEmail(session.email);
+        if (!userByEmail(loadBank(), session.email)) {
+          const token = await firebaseBearer();
+          if (token) await claimDeskAccount(token);
+          claimStagedEmail(session.email);
+        }
+      }
       read();
     });
     const unsub = subscribeBank(read);

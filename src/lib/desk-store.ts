@@ -1,19 +1,13 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import path from "node:path";
-import type { BankState } from "@/lib/bank";
+import { randomBytes } from "node:crypto";
+import { emptyBank, type BankState, type BankUser } from "@/lib/bank";
+import { emptyBalances } from "@/lib/currencies";
 import { mergeMember, scopeDesk } from "@/lib/desk-scope";
 import { deskToken, readFirestoreDesk, writeFirestoreDesk, writeStoredPhoto } from "@/lib/firestore-desk";
-import { isSealed } from "@/lib/sealed";
-import { openState, openText, sealState, sealText } from "@/lib/vault";
+import { openState, sealState } from "@/lib/vault";
 
 type DeskFile = { revision: number; state: BankState };
-type Stored = { revision?: number; state?: BankState; box?: string };
 
 let chain: Promise<unknown> = Promise.resolve();
-
-function deskFile() {
-  return process.env.DESK_PATH || path.join(process.cwd(), "data", "desk.json");
-}
 
 function lock<T>(run: () => Promise<T>) {
   const next = chain.then(run, run);
@@ -24,51 +18,8 @@ function lock<T>(run: () => Promise<T>) {
   return next;
 }
 
-async function writeEnvelope(file: DeskFile) {
-  const target = deskFile();
-  await mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
-  const temp = `${target}.${process.pid}.tmp`;
-  const body = JSON.stringify({ revision: file.revision, box: sealText(JSON.stringify(file.state)) });
-  await writeFile(temp, body, { mode: 0o600 });
-  await rename(temp, target);
-}
-
-async function loadLocked(): Promise<DeskFile | null> {
-  let raw = "";
-  try {
-    raw = await readFile(deskFile(), "utf8");
-  } catch {
-    return null;
-  }
-  let parsed: Stored;
-  try {
-    parsed = JSON.parse(raw) as Stored;
-  } catch {
-    return null;
-  }
-  if (!parsed || typeof parsed.revision !== "number") return null;
-  if (typeof parsed.box === "string" && isSealed(parsed.box)) {
-    try {
-      const state = JSON.parse(openText(parsed.box)) as BankState;
-      if (!state?.users) return null;
-      return { revision: parsed.revision, state };
-    } catch {
-      return null;
-    }
-  }
-  if (!parsed.state?.users) return null;
-  const file = { revision: parsed.revision + 1, state: sealState(parsed.state) };
-  await writeEnvelope(file);
-  return file;
-}
-
 async function currentDesk() {
-  const token = deskToken();
-  if (token) {
-    const remote = await readFirestoreDesk(token);
-    if (remote) return remote;
-  }
-  return loadLocked();
+  return readFirestoreDesk(deskToken());
 }
 
 async function parkPhotos(state: BankState) {
@@ -103,29 +54,34 @@ async function keep(file: DeskFile) {
   } catch {
     sealed = parked;
   }
-  const stored = { revision: file.revision, state: sealed };
-  let filed = false;
-  try {
-    await writeEnvelope(stored);
-    filed = true;
-  } catch {
-    filed = false;
-  }
-  const token = deskToken();
-  let fired = false;
-  if (token) {
-    try {
-      await writeFirestoreDesk(token, stored);
-      fired = true;
-    } catch {
-      fired = false;
-    }
-  }
-  if (token ? !fired : !filed) throw new Error("desk");
+  await writeFirestoreDesk(deskToken(), { revision: file.revision, state: sealed });
+}
+
+function sameMail(user: BankUser, email: string) {
+  const mail = email.trim().toLowerCase();
+  if (!mail || user.email.startsWith("bw1.")) return false;
+  return user.email.toLowerCase() === mail || user.pendingEmail === mail;
 }
 
 function actorOf(state: BankState, email: string) {
-  return state.users.find((user) => !user.email.startsWith("bw1.") && user.email.toLowerCase() === email.toLowerCase());
+  return state.users.find((user) => sameMail(user, email));
+}
+
+function profileFor(email: string): BankUser {
+  const mail = email.trim().toLowerCase();
+  const name = mail.split("@")[0]?.replace(/[._-]+/g, " ").trim() || "Account";
+  return {
+    id: `usr_${randomBytes(4).toString("hex")}`,
+    name: name.slice(0, 80),
+    email: mail,
+    phone: "",
+    role: "member",
+    status: "active",
+    canCreate: false,
+    balances: emptyBalances(),
+    memberSince: new Date().toISOString().slice(0, 10),
+    pin: "",
+  };
 }
 
 function forClient(state: BankState, email: string | null) {
@@ -141,6 +97,51 @@ export function readDesk() {
   return lock(currentDesk);
 }
 
+/** Adds the Firebase Authentication user to the Firestore desk when the profile is missing. */
+export function ensureDeskUser(email: string) {
+  return lock(async () => {
+    const mail = email.trim().toLowerCase();
+    if (!mail) return null;
+    const current = await currentDesk();
+    let opened: BankState;
+    try {
+      opened = current ? openState(current.state) : emptyBank();
+    } catch {
+      return null;
+    }
+    const staged = opened.users.find((user) => !user.email.startsWith("bw1.") && user.pendingEmail === mail);
+    if (current && staged) {
+      const next = {
+        ...opened,
+        users: opened.users.map((user) => (user.id === staged.id ? { ...user, email: mail, pendingEmail: undefined } : user)),
+      };
+      const revision = current.revision + 1;
+      let state = next;
+      try {
+        state = sealState(next);
+      } catch {
+        state = next;
+      }
+      await keep({ revision, state });
+      return { revision, state: forClient(next, mail) };
+    }
+    if (current && opened.users.some((user) => sameMail(user, mail))) {
+      return { revision: current.revision, state: forClient(opened, mail) };
+    }
+    const user = profileFor(mail);
+    const next = { ...opened, users: [user, ...opened.users] };
+    const revision = (current?.revision ?? 0) + 1;
+    let state = next;
+    try {
+      state = sealState(next);
+    } catch {
+      state = next;
+    }
+    await keep({ revision, state });
+    return { revision, state: forClient(next, mail) };
+  });
+}
+
 /** Saves a plaintext desk. A member's copy is merged onto the server book. */
 export function writePlainDesk(plain: BankState, base: number | null, actorEmail: string | null = null) {
   return lock(async () => {
@@ -151,7 +152,18 @@ export function writePlainDesk(plain: BankState, base: number | null, actorEmail
     }
     const actor = opened && actorEmail ? actorOf(opened, actorEmail) : null;
     if (current && opened && actorEmail && !actor) {
-      return { kind: "conflict" as const, revision: current.revision, state: forClient(opened, actorEmail) };
+      const incoming = plain.users.find((user) => sameMail(user, actorEmail));
+      const user = incoming ?? profileFor(actorEmail);
+      const next = { ...opened, users: [user, ...opened.users.filter((item) => item.id !== user.id)] };
+      const revision = current.revision + 1;
+      let state = next;
+      try {
+        state = sealState(next);
+      } catch {
+        state = next;
+      }
+      await keep({ revision, state });
+      return { kind: "saved" as const, revision, state: forClient(next, actorEmail) };
     }
     const next = opened && actor && actor.role !== "admin" ? mergeMember(opened, plain, actorEmail ?? "") : plain;
     const revision = (current?.revision ?? 0) + 1;

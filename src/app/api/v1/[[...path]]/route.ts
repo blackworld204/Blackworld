@@ -1,4 +1,5 @@
 import { runAccountCall } from "@/lib/account-api";
+import { ensureDeskUser } from "@/lib/desk-store";
 import { withDeskAuth } from "@/lib/firestore-desk";
 import { sameOrigin, signedEmail } from "@/lib/request-guard";
 
@@ -52,6 +53,7 @@ async function handle(request: Request, method: string, path: string[]) {
     if (!email) return json(request, 401, { error: "unauthorized" });
     sessionEmail = email;
     authorization = null;
+    await withDeskAuth(token, () => ensureDeskUser(email));
   }
   const result = await withDeskAuth(token, () =>
     runAccountCall({

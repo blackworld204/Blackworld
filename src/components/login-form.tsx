@@ -2,22 +2,37 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useSession } from "@/components/session";
 import { BusyButton } from "@/components/busy-button";
 import { SignOutButton } from "@/components/sign-out-button";
 import { useI18n } from "@/i18n/provider";
 import { authErrorMessage } from "@/components/session";
-import { signInWithGoogle } from "@/lib/auth-mail";
+import { deskTokenForGoogle, deskTokenForPassword, endProbe, signInWithGoogleCredential, type GoogleDeskProof } from "@/lib/auth-mail";
 import { firebaseAuth } from "@/lib/firebase";
-import { consumeRecoveryCode, hydrateBank, loadBank, userByEmail } from "@/lib/bank";
-import { whenDeskReady } from "@/lib/desk-sync";
+import { consumeRecoveryCode, loadBank, userByEmail } from "@/lib/bank";
+import { adoptDeskToken, claimDeskAccount, expectDeskSync, whenDeskReady } from "@/lib/desk-sync";
 import { isSealed } from "@/lib/sealed";
 import { checkSealedCode, checkSealedPin } from "@/lib/vault-client";
 import { verifyTotp } from "@/lib/totp";
 
 function validEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+const DESK_OFFLINE = "The desk could not be reached. Showing the copy on this browser.";
+
+/** Firebase Authentication already accepted this email. Open or create its Firestore profile. */
+async function accountFromToken(mail: string, token: string) {
+  const loaded = await adoptDeskToken(token);
+  const found = userByEmail(loadBank(), mail);
+  if (found) return found;
+  if (loaded === "offline") throw new Error(DESK_OFFLINE);
+  const claimed = await claimDeskAccount(token);
+  if (!claimed) throw new Error(DESK_OFFLINE);
+  const account = userByEmail(loadBank(), mail);
+  if (!account) throw new Error(DESK_OFFLINE);
+  return account;
 }
 
 function GoogleMark() {
@@ -66,36 +81,46 @@ export function LoginForm() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [googleFinish, setGoogleFinish] = useState(false);
+  const googleProof = useRef<GoogleDeskProof | null>(null);
+
+  async function enterWithGoogle(proof: GoogleDeskProof | null, mail: string) {
+    const credential = proof && proof.email.toLowerCase() === mail.toLowerCase() ? proof.credential : null;
+    expectDeskSync();
+    await signInWithGoogleCredential(credential);
+  }
 
   async function continueWithGoogle() {
     if (busy) return;
     setBusy(true);
     setError("");
     try {
-      const user = await signInWithGoogle(true);
-      const mail = user.email?.trim() ?? "";
-      await hydrateBank();
-      const account = mail ? userByEmail(loadBank(), mail) : null;
+      const proof = await deskTokenForGoogle(true);
+      googleProof.current = proof;
+      const mail = proof.email;
+      let account: ReturnType<typeof userByEmail> = null;
+      try {
+        account = mail && proof.token ? await accountFromToken(mail, proof.token) : null;
+      } finally {
+        await endProbe();
+      }
       if (!account) {
-        signOut();
         setError(t("No account for that email."));
         return;
       }
       if (account.status !== "active") {
-        signOut();
         setError(t("This account is inactive."));
         return;
       }
       const wantsPin = Boolean(account.twoFactor);
       const wantsCode = Boolean(account.totpSecret);
       if (wantsPin || wantsCode) {
-        signOut();
         setEmail(mail);
         setEmailOpen(true);
         setChecks({ pin: wantsPin, code: wantsCode });
         setGoogleFinish(true);
         return;
       }
+      await enterWithGoogle(proof, mail);
       await whenDeskReady();
       router.push("/dashboard");
     } catch (reason) {
@@ -106,7 +131,7 @@ export function LoginForm() {
     }
   }
 
-  if (session) {
+  if (session && !busy) {
     return (
       <div className="page">
         <div className="wrap narrow">
@@ -148,8 +173,24 @@ export function LoginForm() {
             }
             setBusy(true);
             void (async () => {
-              await hydrateBank();
-              const account = userByEmail(loadBank(), email.trim());
+              const mail = email.trim();
+              let account: ReturnType<typeof userByEmail> = null;
+              try {
+                if (googleFinish) {
+                  const proof = await deskTokenForGoogle(false);
+                  if (proof.email.toLowerCase() !== mail.toLowerCase()) {
+                    setError(t("No account for that email."));
+                    return;
+                  }
+                  googleProof.current = proof;
+                  account = proof.token ? await accountFromToken(mail, proof.token) : null;
+                } else {
+                  const token = await deskTokenForPassword(mail, password);
+                  account = await accountFromToken(mail, token);
+                }
+              } finally {
+                await endProbe();
+              }
               if (!account) {
                 setError(t("No account for that email."));
                 return;
@@ -182,17 +223,16 @@ export function LoginForm() {
                 return;
               }
               if (googleFinish) {
-                await signInWithGoogle(false);
+                await enterWithGoogle(googleProof.current, mail);
                 const current = firebaseAuth()?.currentUser?.email ?? "";
-                if (current.toLowerCase() !== email.trim().toLowerCase()) {
+                if (current.toLowerCase() !== mail.toLowerCase()) {
                   signOut();
                   setError(t("No account for that email."));
                   return;
                 }
               } else {
-                await signIn(email.trim(), password);
+                await signIn(mail, password);
               }
-              await hydrateBank();
               if (isSealed(account.totpSecret)) consumeRecoveryCode(account.id, code);
               await whenDeskReady();
               router.push("/dashboard");
@@ -218,6 +258,7 @@ export function LoginForm() {
               }}
               onChange={(event) => {
                 setEmail(event.target.value);
+                googleProof.current = null;
                 setGoogleFinish(false);
                 setChecks(null);
                 setPin("");

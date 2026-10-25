@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useI18n } from "@/i18n/provider";
-import { fetchSharedPhoto, loadPhotoBlob } from "@/lib/photos";
+import { fetchSharedPhoto } from "@/lib/photos";
 
 function initials(name: string) {
   const letters = name
@@ -91,26 +91,13 @@ export function AccountPhoto({
       return;
     }
     let alive = true;
-    let objectUrl: string | null = null;
     void (async () => {
       const shared = await fetchSharedPhoto(userId).catch(() => null);
       if (!alive) return;
-      if (shared) {
-        setLocal(shared);
-        return;
-      }
-      const file = await loadPhotoBlob(userId).catch(() => null);
-      if (!alive || !file) return;
-      objectUrl = URL.createObjectURL(file);
-      if (!alive) {
-        URL.revokeObjectURL(objectUrl);
-        return;
-      }
-      setLocal(objectUrl);
+      if (shared) setLocal(shared);
     })();
     return () => {
       alive = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [userId, hasPhoto, inline]);
 

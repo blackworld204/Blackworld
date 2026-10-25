@@ -39,8 +39,8 @@ export async function firebaseBearer() {
   return user.getIdToken();
 }
 
-async function authHeaders() {
-  const token = await firebaseBearer();
+async function authHeaders(bearer?: string) {
+  const token = bearer !== undefined ? bearer || null : await firebaseBearer();
   if (token == null) return null;
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -69,8 +69,8 @@ export async function sealRemote(state: BankState): Promise<SealResult | null> {
   return { kind: "saved", state: data.state, revision: data.revision };
 }
 
-export async function openRemote(state: BankState) {
-  const headers = await authHeaders();
+export async function openRemote(state: BankState, bearer?: string) {
+  const headers = await authHeaders(bearer);
   if (!headers) return null;
   const response = await fetch("/api/vault", {
     method: "POST",
@@ -88,8 +88,8 @@ export type DeskPull =
   | { status: "missing" }
   | { status: "offline" };
 
-export async function pullDesk(): Promise<DeskPull> {
-  const token = await firebaseBearer();
+export async function pullDesk(bearer?: string): Promise<DeskPull> {
+  const token = bearer !== undefined ? bearer || null : await firebaseBearer();
   if (token == null) return { status: "offline" };
   const headers: Record<string, string> = {};
   if (token) headers.Authorization = `Bearer ${token}`;

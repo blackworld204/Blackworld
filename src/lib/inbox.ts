@@ -1,6 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { readFirestoreBox, writeFirestoreBox } from "@/lib/firestore-desk";
 import { isSealed } from "@/lib/sealed";
 import { openText, sealText } from "@/lib/vault";
 
@@ -15,7 +14,7 @@ export type InboxMessage = {
   mailed: boolean;
 };
 
-const FILE = path.join(process.cwd(), "data", "inbox.json");
+const DOC = "inbox";
 let chain: Promise<unknown> = Promise.resolve();
 
 function lock<T>(run: () => Promise<T>) {
@@ -37,38 +36,17 @@ function rowsOf(value: unknown) {
 }
 
 async function writeAll(rows: InboxMessage[]) {
-  await mkdir(path.dirname(FILE), { recursive: true, mode: 0o700 });
-  const temp = `${FILE}.${process.pid}.tmp`;
-  await writeFile(temp, JSON.stringify({ box: sealText(JSON.stringify(rows)) }), { mode: 0o600 });
-  await rename(temp, FILE);
+  await writeFirestoreBox(DOC, sealText(JSON.stringify(rows)));
 }
 
 async function readAll() {
-  let raw = "";
+  const box = await readFirestoreBox(DOC);
+  if (!isSealed(box)) return [];
   try {
-    raw = await readFile(FILE, "utf8");
+    return rowsOf(JSON.parse(openText(box)));
   } catch {
     return [];
   }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw) as unknown;
-  } catch {
-    return [];
-  }
-  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-    const box = (parsed as { box?: unknown }).box;
-    if (typeof box !== "string" || !isSealed(box)) return [];
-    try {
-      return rowsOf(JSON.parse(openText(box)));
-    } catch {
-      return [];
-    }
-  }
-  const rows = rowsOf(parsed);
-  if (rows.length === 0) return [];
-  await writeAll(rows);
-  return rows;
 }
 
 export function saveInboxMessage(input: Omit<InboxMessage, "id" | "at" | "mailed">) {

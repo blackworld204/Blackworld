@@ -1,5 +1,5 @@
 import { scopeDesk } from "@/lib/desk-scope";
-import { readDesk } from "@/lib/desk-store";
+import { ensureDeskUser, readDesk } from "@/lib/desk-store";
 import { withDeskAuth } from "@/lib/firestore-desk";
 import { sameOrigin, signedEmail, signedIn } from "@/lib/request-guard";
 import { openState, sealState } from "@/lib/vault";
@@ -32,4 +32,16 @@ export async function GET(request: Request) {
     /* Without an encryption key the desk stays readable only to this signed-in response. */
   }
   return Response.json({ revision: desk.revision, state: view }, { headers: { "Cache-Control": "no-store" } });
+}
+
+export async function POST(request: Request) {
+  if (!sameOrigin(request)) return Response.json({ error: "forbidden" }, { status: 403 });
+  if (!(await signedIn(request))) return Response.json({ error: "forbidden" }, { status: 403 });
+  const email = await signedEmail(request);
+  if (!email) return Response.json({ error: "forbidden" }, { status: 403 });
+  const header = request.headers.get("authorization") ?? "";
+  const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+  const desk = await withDeskAuth(token, () => ensureDeskUser(email));
+  if (!desk) return Response.json({ error: "missing" }, { status: 404 });
+  return Response.json({ revision: desk.revision, state: desk.state }, { headers: { "Cache-Control": "no-store" } });
 }

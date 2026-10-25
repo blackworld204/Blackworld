@@ -21,7 +21,7 @@ import {
 } from "@/lib/bank";
 import { AccountAccess, EmailVerify } from "@/components/account-access";
 import { AccountPhoto } from "@/components/account-photo";
-import { clearPhoto, photoDataUrl, publishPhoto, savePhoto, withdrawPhoto } from "@/lib/photos";
+import { photoDataUrl, publishPhoto, withdrawPhoto } from "@/lib/photos";
 import { bindFirebasePush, releaseFirebasePush } from "@/lib/firebase-push";
 import {
   disablePush,
@@ -170,7 +170,6 @@ function SettingsForm({ user }: { user: BankUser }) {
       () => {
         void photoDataUrl(file)
           .then(async (photo) => {
-            await savePhoto(user.id, file);
             await publishPhoto(photo);
             patchUser(user.id, { hasPhoto: true });
             setSaved(t("Photo updated."));
@@ -184,7 +183,6 @@ function SettingsForm({ user }: { user: BankUser }) {
   }
 
   async function removePhoto() {
-    await clearPhoto(user.id);
     await withdrawPhoto().catch(() => undefined);
     patchUser(user.id, { hasPhoto: false });
     setSaved(t("Photo removed."));

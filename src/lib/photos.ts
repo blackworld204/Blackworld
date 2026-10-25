@@ -1,46 +1,4 @@
-const DB = "blackworld-files";
-const STORE = "photos";
-
-function openDb() {
-  return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(DB, 1);
-    request.onupgradeneeded = () => {
-      request.result.createObjectStore(STORE);
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-export async function savePhoto(userId: string, file: Blob) {
-  const db = await openDb();
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).put(file, userId);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-  db.close();
-}
-
-export async function loadPhotoBlob(userId: string) {
-  const db = await openDb();
-  const file = await new Promise<Blob | null>((resolve, reject) => {
-    const tx = db.transaction(STORE, "readonly");
-    const request = tx.objectStore(STORE).get(userId);
-    request.onsuccess = () => resolve((request.result as Blob | undefined) ?? null);
-    request.onerror = () => reject(request.error);
-  });
-  db.close();
-  return file;
-}
-
-export async function loadPhoto(userId: string) {
-  const file = await loadPhotoBlob(userId);
-  return file ? URL.createObjectURL(file) : null;
-}
-
-/** A small JPEG the desk can carry, so an admin on another browser can see it. */
+/** A small JPEG stored in Firebase, so an admin on another browser can see it. */
 export async function photoDataUrl(file: Blob) {
   const bitmap = await createImageBitmap(file);
   const max = 480;
@@ -101,15 +59,4 @@ export async function fetchSharedPhoto(userId: string) {
   if (!response?.ok) return null;
   const data = (await response.json().catch(() => null)) as { image?: unknown } | null;
   return typeof data?.image === "string" && data.image.startsWith("data:image/jpeg") ? data.image : null;
-}
-
-export async function clearPhoto(userId: string) {
-  const db = await openDb();
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).delete(userId);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-  db.close();
 }

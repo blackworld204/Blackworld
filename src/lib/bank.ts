@@ -211,9 +211,6 @@ export const MONEY: { code: MoneyCode; name: string; symbol: string }[] = CURREN
 const KEY = "blackworld-bank";
 const EVENT = "blackworld-bank";
 
-/** Presentation account. The password lives in Firebase Authentication, not in this file. */
-export const PRESENTATION_EMAIL = "blackworld1656749@gmail.com";
-
 type BankPersist = (state: BankState) => void;
 let persistBank: BankPersist | null = null;
 let applyingRemote = false;
@@ -222,61 +219,13 @@ export function setBankPersist(fn: BankPersist | null) {
   persistBank = fn;
 }
 
-const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3600_000).toISOString();
-
-export function seedBank(): BankState {
+export function emptyBank(): BankState {
   return {
-    users: [
-      {
-        id: "usr_blackworld",
-        name: "Blackworld",
-        email: PRESENTATION_EMAIL,
-        phone: "+234 807 736 8595",
-        role: "admin",
-        status: "active",
-        canCreate: true,
-        balances: emptyBalances(50000),
-        memberSince: "2024-03-12",
-        pin: "2580",
-      },
-    ],
-    txs: [
-      {
-        id: "tx_open_bw",
-        userId: "usr_blackworld",
-        title: "Initial deposit",
-        detail: "Opening balance",
-        amount: 50000,
-        currency: "USD",
-        direction: "in",
-        at: hoursAgo(19),
-      },
-    ],
-    cards: [
-      {
-        id: "card_bw",
-        userId: "usr_blackworld",
-        holder: "BLACKWORLD",
-        last4: "1656",
-        expiry: "12/27",
-        primary: true,
-        frozen: false,
-        kind: "physical",
-      },
-    ],
-    payees: [
-      {
-        id: "pay_harbor_bw",
-        userId: "usr_blackworld",
-        holder: "Harbor & Co.",
-        bank: "Atlantic Clearing",
-        routing: "026009593",
-        swift: "HARBPRSJ",
-        account: "883120441",
-        currency: "USD",
-      },
-    ],
+    users: [],
+    txs: [],
+    cards: [],
     notes: [],
+    payees: [],
     referrals: [],
     schedules: [],
     approvals: [],
@@ -285,7 +234,6 @@ export function seedBank(): BankState {
 }
 
 export function normalizeBank(parsed: Partial<BankState>): BankState {
-  const seed = seedBank();
   const users = (parsed.users ?? []).map((user) => ({
     ...user,
     twoFactor: Boolean(user.twoFactor),
@@ -317,9 +265,6 @@ export function normalizeBank(parsed: Partial<BankState>): BankState {
   const readableMail = (email: string) => (email.startsWith("bw1.") ? "" : email.toLowerCase());
   const placeholderIds = new Set(users.filter((user) => placeholderEmails.has(readableMail(user.email))).map((user) => user.id));
   const keptUsers = users.filter((user) => !placeholderIds.has(user.id));
-  const presenter = seed.users.find((user) => user.email === PRESENTATION_EMAIL);
-  const sealedDesk = keptUsers.some((user) => user.email.startsWith("bw1."));
-  const hasPresenter = sealedDesk || keptUsers.some((user) => readableMail(user.email) === PRESENTATION_EMAIL);
   const owned = <T extends { userId?: string }>(rows: T[]) => rows.filter((row) => !row.userId || !placeholderIds.has(row.userId));
   const txs = owned(parsed.txs ?? []);
   const cards = owned((parsed.cards ?? []).map((card) => ({
@@ -327,7 +272,7 @@ export function normalizeBank(parsed: Partial<BankState>): BankState {
     frozen: Boolean(card.frozen),
     kind: card.kind === "physical" || card.kind === "virtual" ? card.kind : card.primary ? "physical" : "virtual",
   })));
-  const payees = owned(Array.isArray(parsed.payees) ? parsed.payees : seed.payees);
+  const payees = owned(Array.isArray(parsed.payees) ? parsed.payees : []);
   const notes = owned((parsed.notes ?? []).map((note) => ({
     ...note,
     userId: typeof note.userId === "string" ? note.userId : undefined,
@@ -336,13 +281,12 @@ export function normalizeBank(parsed: Partial<BankState>): BankState {
         ? note.channel
         : undefined,
   }))).filter((note) => note.id !== "note_deposit_bw" && note.id !== "note_admin_bw");
-  const addingPresenter = Boolean(presenter && !hasPresenter);
   return {
-    users: addingPresenter && presenter ? [...keptUsers, presenter] : keptUsers,
-    txs: addingPresenter && presenter ? [...txs, ...seed.txs.filter((item) => item.userId === presenter.id)] : txs,
-    cards: addingPresenter && presenter ? [...cards, ...seed.cards.filter((item) => item.userId === presenter.id)] : cards,
+    users: keptUsers,
+    txs,
+    cards,
     notes,
-    payees: presenter && !hasPresenter ? [...payees, ...seed.payees.filter((item) => item.userId === presenter.id)] : payees,
+    payees,
     referrals: (Array.isArray(parsed.referrals) ? parsed.referrals : []).map((item) => ({
       ...item,
       status: item.status === "earned" ? "earned" as const : "invited" as const,
@@ -355,7 +299,6 @@ export function normalizeBank(parsed: Partial<BankState>): BankState {
 }
 
 let memory: BankState | null = null;
-let hydrating: Promise<BankState> | null = null;
 let commitSerial = 0;
 let replaceSerial = 0;
 const heldLive = new Map<string, BankNote>();
@@ -373,62 +316,21 @@ function deskProblem(name: string) {
   window.dispatchEvent(new Event(name));
 }
 
-function readStored(): BankState | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<BankState>;
-    if (!parsed.users?.length) return null;
-    return normalizeBank(parsed);
-  } catch {
-    return null;
-  }
+function dropStoredCopy() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(KEY);
 }
 
 export function loadBank(): BankState {
-  if (memory) return memory;
-  return readStored() ?? seedBank();
+  return memory ?? emptyBank();
 }
 
+/** The open tab keeps the latest Firebase desk in memory. Nothing is saved in the browser. */
 export function hydrateBank() {
-  if (typeof window === "undefined") return Promise.resolve(seedBank());
+  dropStoredCopy();
   if (memory && !stateNeedsOpen(memory)) return Promise.resolve(memory);
-  if (!hydrating) {
-    hydrating = (async () => {
-      const stored = readStored();
-      let plain = stored ?? seedBank();
-      if (stored && stateNeedsOpen(stored)) {
-        const opened = await openRemote(stored);
-        if (!opened) {
-          memory = stored;
-          deskProblem("bw-desk-open");
-          return stored;
-        }
-        plain = normalizeBank(opened);
-      }
-      memory = plain;
-      const sealed = await sealRemote(plain);
-      if (!sealed) {
-        if (firebaseAuth()?.currentUser) deskProblem("bw-desk-save");
-      } else if (sealed.kind === "conflict") {
-        const opened = await openRemote(sealed.state);
-        if (!opened) deskProblem("bw-desk-open");
-        else {
-          plain = normalizeBank(opened);
-          memory = plain;
-          localStorage.setItem(KEY, JSON.stringify(sealed.state));
-        }
-      } else {
-        localStorage.setItem(KEY, JSON.stringify(sealed.state));
-      }
-      window.dispatchEvent(new Event(EVENT));
-      return plain;
-    })().finally(() => {
-      hydrating = null;
-    });
-  }
-  return hydrating;
+  memory = emptyBank();
+  return Promise.resolve(memory);
 }
 
 export function saveBank(next: BankState) {
@@ -457,7 +359,6 @@ export function saveBank(next: BankState) {
       return;
     }
     if (sealed.revision < (currentRevision() ?? sealed.revision)) return;
-    localStorage.setItem(KEY, JSON.stringify(sealed.state));
     try {
       await persistBank?.(sealed.state);
     } catch {
@@ -500,11 +401,12 @@ function keepRecentNotes(previous: BankState | null, remote: BankState) {
   return { ...merged, notes: [...extra, ...merged.notes] };
 }
 
-export async function replaceBank(incoming: BankState) {
+export async function replaceBank(incoming: BankState, token?: string) {
   const ticket = ++replaceSerial;
   commitSerial += 1;
-  const stored = normalizeBank(JSON.parse(JSON.stringify(incoming)) as BankState);
-  if (!stateNeedsOpen(stored)) {
+  const raw = JSON.parse(JSON.stringify(incoming)) as BankState;
+  if (!stateNeedsOpen(raw)) {
+    const stored = normalizeBank(raw);
     if (ticket !== replaceSerial) return;
     applyingRemote = true;
     let changed = false;
@@ -512,17 +414,14 @@ export async function replaceBank(incoming: BankState) {
       const merged = keepRecentNotes(memory, stored);
       changed = merged.notes.length !== stored.notes.length;
       memory = merged;
-      if (typeof window !== "undefined") {
-        localStorage.setItem(KEY, JSON.stringify(merged));
-        window.dispatchEvent(new Event(EVENT));
-      }
+      if (typeof window !== "undefined") window.dispatchEvent(new Event(EVENT));
     } finally {
       applyingRemote = false;
     }
     persistMerged(changed);
     return;
   }
-  const opened = await openRemote(stored);
+  const opened = await openRemote(raw, token);
   if (ticket !== replaceSerial) return;
   if (!opened) {
     deskProblem("bw-desk-open");
@@ -536,8 +435,7 @@ export async function replaceBank(incoming: BankState) {
     const merged = keepRecentNotes(memory, remote);
     changed = merged.notes.length !== remote.notes.length;
     memory = merged;
-    localStorage.setItem(KEY, JSON.stringify({ ...stored, notes: merged.notes }));
-    window.dispatchEvent(new Event(EVENT));
+    if (typeof window !== "undefined") window.dispatchEvent(new Event(EVENT));
   } finally {
     applyingRemote = false;
   }
