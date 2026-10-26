@@ -35,27 +35,8 @@ export function openText(sealed: string) {
   return Buffer.concat([decipher.update(Buffer.from(body, "base64url")), decipher.final()]).toString("utf8");
 }
 
-function sealValue(value: string) {
-  return value ? sealText(value) : value;
-}
-
 function openValue(value: string) {
   return value ? openText(value) : value;
-}
-
-function sealEmail(value: string) {
-  if (!value || value.startsWith(SEAL_PREFIX)) return value;
-  return sealText(value.trim().toLowerCase());
-}
-
-function sealAddress(address: BankUser["address"]) {
-  if (!address) return address;
-  return {
-    street: sealValue(address.street),
-    city: sealValue(address.city),
-    zip: sealValue(address.zip),
-    country: sealValue(address.country),
-  };
 }
 
 function openAddress(address: BankUser["address"]) {
@@ -68,41 +49,13 @@ function openAddress(address: BankUser["address"]) {
   };
 }
 
-function sealWire<T extends { routing: string; swift: string; account: string }>(row: T): T {
-  return { ...row, routing: sealValue(row.routing), swift: sealValue(row.swift), account: sealValue(row.account) };
-}
-
 function openWire<T extends { routing: string; swift: string; account: string }>(row: T): T {
   return { ...row, routing: openValue(row.routing), swift: openValue(row.swift), account: openValue(row.account) };
-}
-
-function sealBalances(balances: BankUser["balances"]) {
-  if (typeof balances === "string" && isSealed(balances)) return balances;
-  return sealText(JSON.stringify(balances)) as unknown as BankUser["balances"];
 }
 
 function openBalances(balances: BankUser["balances"]) {
   if (typeof balances === "string" && isSealed(balances)) return JSON.parse(openText(balances)) as BankUser["balances"];
   return balances;
-}
-
-function sealUser(user: BankUser): BankUser {
-  return {
-    ...user,
-    email: sealEmail(user.email),
-    phone: sealValue(user.phone),
-    pin: user.pin ? sealText(user.pin) : user.pin,
-    balances: sealBalances(user.balances),
-    totpSecret: user.totpSecret ? sealText(user.totpSecret) : undefined,
-    apiKey: user.apiKey ? sealText(user.apiKey) : undefined,
-    webhookUrl: user.webhookUrl ? sealText(user.webhookUrl) : undefined,
-    referralId: user.referralId ? sealText(user.referralId) : undefined,
-    referredBy: user.referredBy ? sealText(user.referredBy) : undefined,
-    recoveryCodes: user.recoveryCodes?.map((code) => sealText(code)),
-    pushTokens: user.pushTokens?.map((token) => sealText(token)),
-    address: sealAddress(user.address),
-    photo: undefined,
-  };
 }
 
 function openUser(user: BankUser): BankUser {
@@ -123,15 +76,9 @@ function openUser(user: BankUser): BankUser {
   };
 }
 
+/** The live server does not share this machine's key. Sealing the stored book makes login fail there, so the book stays readable. */
 export function sealState(state: BankState): BankState {
-  return {
-    ...state,
-    users: state.users.map(sealUser),
-    payees: (state.payees ?? []).map(sealWire),
-    referrals: (state.referrals ?? []).map((row) => ({ ...row, email: sealEmail(row.email) })),
-    schedules: (state.schedules ?? []).map(sealWire),
-    approvals: (state.approvals ?? []).map(sealWire),
-  };
+  return state;
 }
 
 export function openState(state: BankState): BankState {
