@@ -138,8 +138,14 @@ export async function POST(request: Request) {
         const plain = normalizeBank(openState(current.state));
         const next = attachReferral(plain, referral, company, email);
         if (!next) return { file: null, value: null };
+        let state = next;
+        try {
+          state = sealState(next);
+        } catch {
+          state = next;
+        }
         return {
-          file: { revision: current.revision + 1, state: sealState(next) },
+          file: { revision: current.revision + 1, state },
           value: null,
         };
       } catch {

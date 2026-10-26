@@ -36,14 +36,22 @@ function rowsOf(value: unknown) {
 }
 
 async function writeAll(rows: InboxMessage[]) {
-  await writeFirestoreBox(DOC, sealText(JSON.stringify(rows)));
+  const plain = JSON.stringify(rows);
+  let box = plain;
+  try {
+    box = sealText(plain);
+  } catch {
+    box = plain;
+  }
+  await writeFirestoreBox(DOC, box);
 }
 
 async function readAll() {
   const box = await readFirestoreBox(DOC);
-  if (!isSealed(box)) return [];
+  if (!box) return [];
   try {
-    return rowsOf(JSON.parse(openText(box)));
+    const text = isSealed(box) ? openText(box) : box;
+    return rowsOf(JSON.parse(text));
   } catch {
     return [];
   }

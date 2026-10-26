@@ -848,7 +848,12 @@ export async function runAccountCall(call: Call): Promise<Reply> {
           file: null,
           value: { status: result.status ?? 200, body: result.value },
         };
-      const sealed = sealState(result.state);
+      let sealed = result.state;
+      try {
+        sealed = sealState(result.state);
+      } catch {
+        sealed = result.state;
+      }
       if (result.eventIds?.length)
         await deliverEvents(result.state, result.eventIds).catch(() => 0);
       return {
