@@ -802,15 +802,7 @@ export async function runAccountCall(call: Call): Promise<Reply> {
         file: null,
         value: { status: 503, body: { error: "The desk is not ready." } },
       };
-    let plain: BankState;
-    try {
-      plain = normalizeBank(openState(current.state));
-    } catch {
-      return {
-        file: null,
-        value: { status: 503, body: { error: "The desk is not ready." } },
-      };
-    }
+    const plain = normalizeBank(openState(current.state));
     const user = call.sessionEmail
       ? plain.users.find(
           (item) =>
@@ -957,9 +949,8 @@ function recordOf(value: unknown) {
 async function knownActor(call: Call) {
   return withDeskLock(async (current) => {
     if (!current) return { file: null, value: "missing" as const };
-    try {
-      const plain = normalizeBank(openState(current.state));
-      const user = call.sessionEmail
+    const plain = normalizeBank(openState(current.state));
+    const user = call.sessionEmail
         ? plain.users.find(
             (item) =>
               item.email.toLowerCase() === call.sessionEmail!.toLowerCase() &&
@@ -970,13 +961,10 @@ async function knownActor(call: Call) {
               sameKey(item.apiKey, bearer(call.authorization)) &&
               item.status === "active",
           );
-      return {
-        file: null,
-        value: user ? ("ok" as const) : ("denied" as const),
-      };
-    } catch {
-      return { file: null, value: "missing" as const };
-    }
+    return {
+      file: null,
+      value: user ? ("ok" as const) : ("denied" as const),
+    };
   });
 }
 

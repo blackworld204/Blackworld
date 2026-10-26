@@ -247,7 +247,7 @@ export function normalizeBank(parsed: Partial<BankState>): BankState {
     privacy: { ...DEFAULT_PRIVACY, ...user.privacy },
     photo: storedPhoto(user.photo),
     hasPhoto: Boolean(user.hasPhoto) || Boolean(storedPhoto(user.photo)),
-    balances: balancesOf(user.balances),
+    balances: isSealed(user.balances) ? user.balances : balancesOf(user.balances),
     displayCurrency: user.displayCurrency && isMoneyCode(user.displayCurrency) ? user.displayCurrency : "USD",
     approvalLimit: typeof user.approvalLimit === "number" ? user.approvalLimit : 10000,
     apiKey: storedText(user.apiKey),
@@ -408,12 +408,14 @@ export async function replaceBank(incoming: BankState, token?: string) {
   }
   let opened = await openRemote(raw, token);
   if (ticket !== replaceSerial) return;
-  if (!opened) opened = await openRemote(raw, token);
-  if (ticket !== replaceSerial || !opened || stateNeedsOpen(opened)) return;
+  if (!opened || stateNeedsOpen(opened)) opened = await openRemote(raw, token);
+  if (ticket !== replaceSerial) return;
+  const readable = opened && !stateNeedsOpen(opened) ? opened : raw;
+  if (stateNeedsOpen(readable) && !readable.users.some((user) => !user.email.startsWith("bw1."))) return;
   applyingRemote = true;
   let changed = false;
   try {
-    const remote = normalizeBank(opened);
+    const remote = normalizeBank(readable);
     const merged = keepRecentNotes(memory, remote);
     changed = merged.notes.length !== remote.notes.length;
     memory = merged;

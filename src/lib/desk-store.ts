@@ -3,7 +3,6 @@ import { emptyBank, type BankState, type BankUser } from "@/lib/bank";
 import { emptyBalances } from "@/lib/currencies";
 import { mergeMember, scopeDesk } from "@/lib/desk-scope";
 import { deskToken, readFirestoreDesk, writeFirestoreDesk, writeStoredPhoto } from "@/lib/firestore-desk";
-import { isSealed } from "@/lib/sealed";
 import { openState, sealState } from "@/lib/vault";
 
 type DeskFile = { revision: number; state: BankState };
@@ -84,10 +83,6 @@ function forClient(state: BankState, email: string | null) {
   return scopeDesk(state, email);
 }
 
-function locked(state: BankState) {
-  return state.users.some((user) => isSealed(user.email));
-}
-
 export function readDesk() {
   const token = deskToken();
   return lock(() => readFirestoreDesk(token));
@@ -100,12 +95,7 @@ export function ensureDeskUser(email: string) {
     const mail = email.trim().toLowerCase();
     if (!mail) return null;
     const current = await readFirestoreDesk(token);
-    let opened: BankState;
-    try {
-      opened = current ? openState(current.state) : emptyBank();
-    } catch {
-      throw new Error("desk-unavailable");
-    }
+    const opened = current ? openState(current.state) : emptyBank();
     const staged = opened.users.find((user) => !user.email.startsWith("bw1.") && user.pendingEmail === mail);
     if (current && staged) {
       const next = {
@@ -125,7 +115,6 @@ export function ensureDeskUser(email: string) {
     if (current && opened.users.some((user) => sameMail(user, mail))) {
       return { revision: current.revision, state: forClient(opened, mail) };
     }
-    if (current && locked(opened)) return null;
     const user = profileFor(mail);
     const next = { ...opened, users: [user, ...opened.users] };
     const revision = (current?.revision ?? 0) + 1;
@@ -146,7 +135,6 @@ export function writePlainDesk(plain: BankState, base: number | null, actorEmail
   return lock(async () => {
     const current = await readFirestoreDesk(token);
     const opened = current ? openState(current.state) : null;
-    if (opened && locked(opened)) throw new Error("locked");
     if (current && opened && base !== current.revision) {
       return { kind: "conflict" as const, revision: current.revision, state: forClient(opened, actorEmail) };
     }

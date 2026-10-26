@@ -1,5 +1,5 @@
-import { hydrateBank, loadBank, replaceBank, type BankState } from "@/lib/bank";
-import { currentRevision, firebaseBearer, pullDesk, rememberRevision, stateNeedsOpen } from "@/lib/vault-client";
+import { hydrateBank, replaceBank, type BankState } from "@/lib/bank";
+import { currentRevision, firebaseBearer, pullDesk, rememberRevision } from "@/lib/vault-client";
 
 let finishReady = () => {};
 let ready: Promise<void> = Promise.resolve();
@@ -41,8 +41,6 @@ export async function adoptDeskToken(token: string): Promise<"ready" | "offline"
   if (remote.status === "updated") {
     rememberRevision(remote.revision);
     await replaceBank(remote.state, token);
-    const opened = !stateNeedsOpen(loadBank()) && loadBank().users.length > 0;
-    if (stateNeedsOpen(remote.state) && !opened) return "offline";
     return "ready";
   }
   if (remote.status === "current" || remote.status === "missing") return "ready";

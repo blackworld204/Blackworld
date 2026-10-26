@@ -6,7 +6,7 @@ import { scopeDesk } from "@/lib/desk-scope";
 import { sameOrigin, signedEmail, signedIn } from "@/lib/request-guard";
 import { isSealed } from "@/lib/sealed";
 import { verifyTotp } from "@/lib/totp";
-import { openState, openText, vaultReady } from "@/lib/vault";
+import { openState, openText } from "@/lib/vault";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,7 +43,6 @@ export async function POST(request: Request) {
   if (!body || typeof body !== "object") return Response.json({ error: "invalid" }, { status: 400 });
   const record = body as { op?: unknown; state?: BankState; revision?: unknown; sealed?: unknown; pin?: unknown; code?: unknown; codes?: unknown };
   if (record.op === "check-pin" || record.op === "check-code") {
-    if (!vaultReady()) return Response.json({ error: "unavailable" }, { status: 503 });
     if (!allowedPace(request, 5, 15 * 60_000)) return Response.json({ error: "forbidden" }, { status: 429 });
     try {
       if (record.op === "check-pin") {
