@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
 import { loadBank, markNote, markNotes, notesFor, subscribeBank, when } from "@/lib/bank";
@@ -11,7 +10,6 @@ export default function NotificationsPage() {
   const { state, user } = useAccount();
   const { t, locale } = useI18n();
   const [filter, setFilter] = useState<"all" | "unread">("all");
-  const [ask, setAsk] = useState(false);
   const [tick, setTick] = useState(0);
 
   useEffect(() => subscribeBank(() => setTick((value) => value + 1)), []);
@@ -40,7 +38,7 @@ export default function NotificationsPage() {
           {t("Unread")}
         </button>
         {unread > 0 ? (
-          <button type="button" className="btn btn-sm" onClick={() => setAsk(true)}>
+          <button type="button" className="btn btn-sm" onClick={() => markNotes(user.id, true)}>
             {t("Mark all read")}
           </button>
         ) : null}
@@ -65,17 +63,6 @@ export default function NotificationsPage() {
       <p>
         <Link href="/dashboard/settings#alerts">{t("Notification settings")}</Link>
       </p>
-      <ConfirmDialog
-        open={ask}
-        title={t("Mark all as read?")}
-        body={t("Every notice on this desk is marked read.")}
-        confirmLabel={t("Mark all read")}
-        onClose={() => setAsk(false)}
-        onConfirm={() => {
-          markNotes(user.id, true);
-          setAsk(false);
-        }}
-      />
     </div>
   );
 }

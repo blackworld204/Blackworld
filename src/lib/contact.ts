@@ -1,4 +1,4 @@
-export const CONTACT_EMAIL = "blackworld1656749@gmail.com";
+export const CONTACT_EMAIL = "nwekesomto12@gmail.com";
 export const CONTACT_PHONE = "+2348077368595";
 export const CONTACT_PHONE_DISPLAY = "+234 807 736 8595";
 export const CONTACT_WHATSAPP = "https://wa.me/2348077368595";

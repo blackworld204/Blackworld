@@ -201,7 +201,7 @@ export const legalPages = {
       {
         heading: "Complaints",
         clauses: [
-          "Write to blackworld1656749@gmail.com, call or WhatsApp +234 807 736 8595, or use the support form.",
+          "Write to nwekesomto12@gmail.com, call or WhatsApp +234 807 736 8595, or use the support form.",
           "Include the institution, the email, and what happened. We aim to answer within one business day.",
           "If you are not satisfied, you may take the matter to the courts named in the next section. A live agreement may add its own process.",
         ],
@@ -218,7 +218,7 @@ export const legalPages = {
         heading: "Contact",
         clauses: [
           "Blackworld, 254 San José Street, San Juan, PR 00901.",
-          "Email blackworld1656749@gmail.com.",
+          "Email nwekesomto12@gmail.com.",
           "Phone and WhatsApp +234 807 736 8595.",
         ],
       },

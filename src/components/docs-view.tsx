@@ -96,8 +96,8 @@ export function DocsView() {
           ))}
         </div>
         <div className="actions">
-          <Link className="btn btn-primary" href="/register">
-            {t("Create account")}
+          <Link className="btn btn-primary" href="/login">
+            {t("Login")}
           </Link>
           <Link className="btn btn-ghost" href="/#developers">
             {t("Accounts, cards, and payments")}

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ConnectionMark } from "@/components/connection-mark";
+import { Glyph } from "@/components/glyph";
 import { Inbox } from "@/components/inbox";
 import { LanguageSelect } from "@/components/language-select";
 import { Mark } from "@/components/mark";
@@ -96,6 +97,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       return linkItems([
         { href: "/dashboard/admin", label: "Admin" },
         { href: "/dashboard/team", label: "Team" },
+        { href: "/dashboard/notifications", label: "Notifications" },
+        { href: "/dashboard/settings#signin", label: "Sign-in" },
         { href: "/dashboard/settings", label: "Notification settings" },
       ]);
     }
@@ -140,9 +143,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           className="menu-toggle app-menu-toggle"
           aria-expanded={open}
           aria-controls="account-menu"
+          aria-label={t("Menu")}
           onClick={() => setOpen(true)}
         >
-          {t("Menu")}
+          <Glyph name="menu" />
         </button>
         <div className="app-bar-actions">
           <ConnectionMark />

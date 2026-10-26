@@ -1,4 +1,4 @@
-export function Glyph({ name }: { name: "send" | "deposit" | "card" | "exchange" | "support" | "bell" | "in" | "out" }) {
+export function Glyph({ name }: { name: "send" | "deposit" | "card" | "exchange" | "support" | "bell" | "in" | "out" | "menu" }) {
   const common = {
     viewBox: "0 0 24 24",
     width: 18,
@@ -65,6 +65,15 @@ export function Glyph({ name }: { name: "send" | "deposit" | "card" | "exchange"
         <path d="M12 16V5" />
         <path d="M8 9l4-4 4 4" />
         <path d="M5 20h14" />
+      </svg>
+    );
+  }
+  if (name === "menu") {
+    return (
+      <svg {...common} width={22} height={22}>
+        <path d="M4 7h16" />
+        <path d="M4 12h16" />
+        <path d="M4 17h16" />
       </svg>
     );
   }

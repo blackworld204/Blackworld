@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ConnectionMark } from "@/components/connection-mark";
+import { Glyph } from "@/components/glyph";
 import { LanguageSelect } from "@/components/language-select";
 import { Mark } from "@/components/mark";
 import { useSession } from "@/components/session";
@@ -53,9 +54,10 @@ export function Header() {
           className="menu-toggle"
           aria-expanded={open}
           aria-controls="site-menu"
+          aria-label={t("Menu")}
           onClick={() => setOpen(true)}
         >
-          {t("Menu")}
+          <Glyph name="menu" />
         </button>
         <nav className="nav-desktop" aria-label={t("Platform")}>
           {links.map((link) => (
@@ -79,14 +81,11 @@ export function Header() {
               </Link>
               <SignOutButton className="text-button session-signout" />
             </>
-          ) : ready ? (
-            <Link href="/login" className="text-button login-link">
+          ) : (
+            <Link href="/login" className="btn btn-primary btn-sm">
               {t("Login")}
             </Link>
-          ) : null}
-          <Link href="/register" className="btn btn-primary btn-sm">
-            {t("Create account")}
-          </Link>
+          )}
         </div>
       </div>
       {open ? (
@@ -117,13 +116,13 @@ export function Header() {
             ) : null}
             {session ? (
               <SignOutButton className="menu-signout" onDone={() => setOpen(false)} />
-            ) : (
-              <Link href="/login" onClick={() => setOpen(false)}>{t("Login")}</Link>
-            )}
+            ) : null}
           </nav>
-          <Link href="/register" className="btn btn-primary" onClick={() => setOpen(false)}>
-            {t("Create account")}
-          </Link>
+          {session ? null : (
+            <Link href="/login" className="btn btn-primary" onClick={() => setOpen(false)}>
+              {t("Login")}
+            </Link>
+          )}
         </div>
       ) : null}
     </header>

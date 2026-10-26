@@ -3,11 +3,15 @@
 import { onAuthStateChanged } from "firebase/auth";
 import { useEffect, useState } from "react";
 import { BusyButton } from "@/components/busy-button";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { PasswordStrength } from "@/components/password-strength";
+import { SecretInput } from "@/components/secret-input";
 import { authErrorMessage } from "@/components/session";
 import { useI18n } from "@/i18n/provider";
-import { requestEmailChange, sendAddressVerification, sendPasswordReset } from "@/lib/auth-mail";
-import { clearStagedEmail, stageEmailChange } from "@/lib/bank";
+import { changeSignedInPassword, requestEmailChange, sendAddressVerification, sendPasswordReset } from "@/lib/auth-mail";
+import { addNote, alertsOf, clearStagedEmail, loadBank, stageEmailChange } from "@/lib/bank";
 import { ensureFirebaseAuth } from "@/lib/firebase";
+import { isStrongPassword } from "@/lib/password-strength";
 
 function validEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
@@ -73,11 +77,16 @@ export function EmailVerify({ email }: { email: string }) {
 export function AccountAccess({ userId, email }: { userId: string; email: string }) {
   const { t } = useI18n();
   const [nextEmail, setNextEmail] = useState("");
+  const [emailPassword, setEmailPassword] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [nextPassword, setNextPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState<"change" | "reset" | null>(null);
+  const [busy, setBusy] = useState<"change" | "password" | "reset" | null>(null);
+  const [ask, setAsk] = useState<"change" | "password" | null>(null);
 
-  async function run(kind: "change" | "reset", task: () => Promise<void>) {
+  async function run(kind: "change" | "password" | "reset", task: () => Promise<void>) {
     setBusy(kind);
     setMessage("");
     setError("");
@@ -90,9 +99,17 @@ export function AccountAccess({ userId, email }: { userId: string; email: string
     }
   }
 
+  function noteSecurity(title: string, body: string) {
+    const owner = loadBank().users.find((user) => user.id === userId);
+    if (!owner || !alertsOf(owner).security) return;
+    addNote({ userId, title, body, channel: "security" });
+  }
+
   return (
-    <section className="stack account-access">
+    <section className="stack account-access" id="signin">
       <h2>{t("Sign-in")}</h2>
+      <p className="muted">{t("This address is used to sign in.")}</p>
+      <p>{email}</p>
       <EmailVerify email={email} />
       <form
         className="stack"
@@ -103,18 +120,13 @@ export function AccountAccess({ userId, email }: { userId: string; email: string
             setError(t("Enter an email."));
             return;
           }
-          void run("change", async () => {
-            const staged = stageEmailChange(userId, nextEmail);
-            if (staged) throw new Error(staged);
-            try {
-              await requestEmailChange(nextEmail);
-            } catch (reason) {
-              clearStagedEmail(userId);
-              throw reason;
-            }
-            setNextEmail("");
-            setMessage(t("A confirmation link is on its way to the new address. This account keeps the current address until that link is opened."));
-          });
+          if (!emailPassword) {
+            setMessage("");
+            setError(t("Enter your current password."));
+            return;
+          }
+          setError("");
+          setAsk("change");
         }}
       >
         <p className="kicker">{t("Email address change")}</p>
@@ -130,14 +142,93 @@ export function AccountAccess({ userId, email }: { userId: string; email: string
             }}
           />
         </label>
+        <label className="field">
+          <span>{t("Current password")}</span>
+          <SecretInput
+            autoComplete="current-password"
+            value={emailPassword}
+            showLabel={t("Show password")}
+            hideLabel={t("Hide password")}
+            onChange={(value) => {
+              setEmailPassword(value);
+              setError("");
+            }}
+          />
+        </label>
         <BusyButton className="btn btn-primary" type="submit" busy={busy === "change"}>
           {t("Send change link")}
         </BusyButton>
       </form>
+      <form
+        className="stack"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!currentPassword) {
+            setMessage("");
+            setError(t("Enter your current password."));
+            return;
+          }
+          if (!isStrongPassword(nextPassword)) {
+            setMessage("");
+            setError(t("Use 8 characters with upper and lower case, a number, and a symbol."));
+            return;
+          }
+          if (nextPassword !== confirmPassword) {
+            setMessage("");
+            setError(t("Passwords do not match."));
+            return;
+          }
+          setError("");
+          setAsk("password");
+        }}
+      >
+        <p className="kicker">{t("Password")}</p>
+        <label className="field">
+          <span>{t("Current password")}</span>
+          <SecretInput
+            autoComplete="current-password"
+            value={currentPassword}
+            showLabel={t("Show password")}
+            hideLabel={t("Hide password")}
+            onChange={(value) => {
+              setCurrentPassword(value);
+              setError("");
+            }}
+          />
+        </label>
+        <label className="field">
+          <span>{t("New password")}</span>
+          <SecretInput
+            autoComplete="new-password"
+            value={nextPassword}
+            showLabel={t("Show password")}
+            hideLabel={t("Hide password")}
+            onChange={(value) => {
+              setNextPassword(value);
+              setError("");
+            }}
+          />
+        </label>
+        <PasswordStrength password={nextPassword} />
+        <label className="field">
+          <span>{t("Confirm password")}</span>
+          <SecretInput
+            autoComplete="new-password"
+            value={confirmPassword}
+            showLabel={t("Show password")}
+            hideLabel={t("Hide password")}
+            onChange={(value) => {
+              setConfirmPassword(value);
+              setError("");
+            }}
+          />
+        </label>
+        <BusyButton className="btn btn-primary" type="submit" busy={busy === "password"}>
+          {t("Update password")}
+        </BusyButton>
+      </form>
       <div>
-        <p className="kicker">{t("Password reset address")}</p>
-        <p className="muted">{t("This address receives the password reset link.")}</p>
-        <p>{email}</p>
+        <p className="muted">{t("A reset link can be sent to the current address.")}</p>
         <BusyButton
           type="button"
           className="btn btn-ghost btn-sm"
@@ -158,6 +249,48 @@ export function AccountAccess({ userId, email }: { userId: string; email: string
         </p>
       ) : null}
       {message ? <p role="status">{message}</p> : null}
+      <ConfirmDialog
+        open={ask !== null}
+        title={ask === "change" ? t("Send this change link?") : t("Change this password?")}
+        body={
+          ask === "change"
+            ? t("The new address receives a link. This account keeps {email} until that link is opened.", { email })
+            : t("The next sign-in uses the new password.")
+        }
+        confirmLabel={ask === "change" ? t("Send change link") : t("Update password")}
+        onClose={() => setAsk(null)}
+        onConfirm={() => {
+          const choice = ask;
+          setAsk(null);
+          if (choice === "change") {
+            void run("change", async () => {
+              const staged = stageEmailChange(userId, nextEmail);
+              if (staged) throw new Error(staged);
+              try {
+                await requestEmailChange(nextEmail, emailPassword);
+              } catch (reason) {
+                clearStagedEmail(userId);
+                throw reason;
+              }
+              setNextEmail("");
+              setEmailPassword("");
+              noteSecurity("Email change requested", "A confirmation link was sent to a new sign-in address.");
+              setMessage(t("A confirmation link is on its way to the new address. This account keeps the current address until that link is opened."));
+            });
+            return;
+          }
+          if (choice === "password") {
+            void run("password", async () => {
+              await changeSignedInPassword(currentPassword, nextPassword);
+              setCurrentPassword("");
+              setNextPassword("");
+              setConfirmPassword("");
+              noteSecurity("Password updated", "The sign-in password for this account was changed.");
+              setMessage(t("Password updated."));
+            });
+          }
+        }}
+      />
     </section>
   );
 }

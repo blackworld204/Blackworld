@@ -101,7 +101,8 @@ function SettingsForm({ user }: { user: BankUser }) {
   useEffect(() => {
     if (adminDesk) {
       setSection("notifications");
-      if (window.location.hash !== "#alerts")
+      const hash = window.location.hash;
+      if (hash !== "#alerts" && hash !== "#signin")
         window.history.replaceState(
           null,
           "",

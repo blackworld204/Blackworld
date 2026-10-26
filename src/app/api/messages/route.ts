@@ -82,8 +82,11 @@ async function tryMail(input: { name: string; email: string; topic: string; comp
       _captcha: "false",
     }),
   }).catch(() => null);
-  const data = await response?.json().catch(() => null);
-  return Boolean(response?.ok && data && data.success !== false && data.success !== "false");
+  const data = (await response?.json().catch(() => null)) as { success?: unknown; message?: unknown } | null;
+  const mailed = Boolean(response?.ok && data && data.success !== false && data.success !== "false");
+  const note = typeof data?.message === "string" ? data.message : "";
+  const reason = mailed ? "" : /activation/i.test(note) ? "activate" : "failed";
+  return { mailed, reason };
 }
 
 export async function GET(request: Request) {
@@ -154,8 +157,10 @@ export async function POST(request: Request) {
     })).catch(() => null);
   }
   const origin = request.headers.get("origin") || new URL(request.url).origin;
-  const mailed = await tryMail({ name, email, topic, company, message }, origin, request.headers.get("referer") || `${origin}/support`);
-  if (saved && mailed) await markInboxMailed(saved.id).catch(() => undefined);
-  if (!saved && !mailed) return Response.json({ error: "failed" }, { status: 502 });
+  const mail = await tryMail({ name, email, topic, company, message }, origin, request.headers.get("referer") || `${origin}/support`);
+  if (saved && mail.mailed) await markInboxMailed(saved.id).catch(() => undefined);
+  if (!mail.mailed && !saved) {
+    return Response.json({ error: mail.reason === "activate" ? "activate" : "failed" }, { status: 502 });
+  }
   return Response.json({ ok: true });
 }

@@ -2,18 +2,22 @@ import {
   applyActionCode,
   checkActionCode,
   confirmPasswordReset,
+  EmailAuthProvider,
   GoogleAuthProvider,
+  reauthenticateWithCredential,
   sendEmailVerification,
   sendPasswordResetEmail,
   signInWithCredential,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
+  updatePassword,
   verifyBeforeUpdateEmail,
   verifyPasswordResetCode,
   type ActionCodeSettings,
   type Auth,
   type AuthCredential,
+  type User,
 } from "firebase/auth";
 import { changeUserEmail } from "@/lib/bank";
 import { authReturnSettings, ensureFirebaseAuth, namedFirebaseAuth } from "@/lib/firebase";
@@ -40,11 +44,26 @@ export async function sendAddressVerification() {
   await sendEmailVerification(current, authContinueSettings());
 }
 
-export async function requestEmailChange(nextEmail: string) {
+async function reauthenticateEmail(password: string, signedOut: string) {
   const auth = await authReady();
   const current = auth.currentUser;
-  if (!current) throw new Error("Sign in again to change this address.");
+  const email = current?.email?.trim();
+  if (!current || !email) throw new Error(signedOut);
+  if (!current.providerData.some((item) => item.providerId === "password")) {
+    throw new Error("This sign-in uses Google. Change the email and password on that Google account.");
+  }
+  await reauthenticateWithCredential(current, EmailAuthProvider.credential(email, password));
+  return current;
+}
+
+export async function requestEmailChange(nextEmail: string, currentPassword: string) {
+  const current = await reauthenticateEmail(currentPassword, "Sign in again to change this address.");
   await verifyBeforeUpdateEmail(current, nextEmail.trim(), authContinueSettings());
+}
+
+export async function changeSignedInPassword(currentPassword: string, nextPassword: string) {
+  const current: User = await reauthenticateEmail(currentPassword, "Sign in again to change this password.");
+  await updatePassword(current, nextPassword);
 }
 
 export async function signInWithGoogle(pick = false) {

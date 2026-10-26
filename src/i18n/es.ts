@@ -477,8 +477,8 @@ export const es: Record<string, string> = {
   "Businesses, fintechs, and institutions. Retail banking ended in October 2025.":
     "Empresas, fintechs e instituciones. La banca minorista terminó en octubre de 2025.",
   "How do I reach a person?": "¿Cómo hablo con una persona?",
-  "Open live chat, call +234 807 736 8595, or write to blackworld1656749@gmail.com. A reply goes to the email you enter.":
-    "Abra el chat en vivo, llame al +234 807 736 8595, o escriba a blackworld1656749@gmail.com. La respuesta va al correo que indique.",
+  "Open live chat, call +234 807 736 8595, or write to nwekesomto12@gmail.com. A reply goes to the email you enter.":
+    "Abra el chat en vivo, llame al +234 807 736 8595, o escriba a nwekesomto12@gmail.com. La respuesta va al correo que indique.",
   "Call this number for support.": "Llame a este número para soporte.",
   Loading: "Cargando",
   "How soon will you reply?": "¿Cuándo responden?",

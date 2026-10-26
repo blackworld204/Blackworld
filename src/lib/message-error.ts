@@ -6,5 +6,6 @@ export async function messageFailure(response: Response) {
   if (data?.error === "company") return "Enter the company name.";
   if (data?.error === "topic") return "Choose a topic.";
   if (data?.error === "message") return "Add a short message.";
+  if (data?.error === "activate") return "Support mail is not active yet. Use the email, phone, or WhatsApp on this page.";
   return "The message did not send. Try again.";
 }
