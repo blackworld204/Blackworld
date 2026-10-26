@@ -19,12 +19,7 @@ function lock<T>(run: () => Promise<T>) {
   return next;
 }
 
-async function currentDesk() {
-  return readFirestoreDesk(deskToken());
-}
-
-async function parkPhotos(state: BankState) {
-  const token = deskToken();
+async function parkPhotos(token: string, state: BankState) {
   const users = await Promise.all(
     state.users.map(async (user) => {
       if (!user.photo?.startsWith("data:image/jpeg")) {
@@ -47,15 +42,15 @@ async function parkPhotos(state: BankState) {
   return { ...state, users };
 }
 
-async function keep(file: DeskFile) {
-  const parked = await parkPhotos(openState(file.state));
+async function keep(token: string, file: DeskFile) {
+  const parked = await parkPhotos(token, openState(file.state));
   let sealed = parked;
   try {
     sealed = sealState(parked);
   } catch {
     sealed = parked;
   }
-  await writeFirestoreDesk(deskToken(), { revision: file.revision, state: sealed });
+  await writeFirestoreDesk(token, { revision: file.revision, state: sealed });
 }
 
 function sameMail(user: BankUser, email: string) {
@@ -94,20 +89,22 @@ function locked(state: BankState) {
 }
 
 export function readDesk() {
-  return lock(currentDesk);
+  const token = deskToken();
+  return lock(() => readFirestoreDesk(token));
 }
 
 /** Adds the Firebase Authentication user to the Firestore desk when the profile is missing. */
 export function ensureDeskUser(email: string) {
+  const token = deskToken();
   return lock(async () => {
     const mail = email.trim().toLowerCase();
     if (!mail) return null;
-    const current = await currentDesk();
+    const current = await readFirestoreDesk(token);
     let opened: BankState;
     try {
       opened = current ? openState(current.state) : emptyBank();
     } catch {
-      return null;
+      throw new Error("desk-unavailable");
     }
     const staged = opened.users.find((user) => !user.email.startsWith("bw1.") && user.pendingEmail === mail);
     if (current && staged) {
@@ -122,7 +119,7 @@ export function ensureDeskUser(email: string) {
       } catch {
         state = next;
       }
-      await keep({ revision, state });
+      await keep(token, { revision, state });
       return { revision, state: forClient(next, mail) };
     }
     if (current && opened.users.some((user) => sameMail(user, mail))) {
@@ -138,15 +135,16 @@ export function ensureDeskUser(email: string) {
     } catch {
       state = next;
     }
-    await keep({ revision, state });
+    await keep(token, { revision, state });
     return { revision, state: forClient(next, mail) };
   });
 }
 
 /** Saves a plaintext desk. A member's copy is merged onto the server book. */
 export function writePlainDesk(plain: BankState, base: number | null, actorEmail: string | null = null) {
+  const token = deskToken();
   return lock(async () => {
-    const current = await currentDesk();
+    const current = await readFirestoreDesk(token);
     const opened = current ? openState(current.state) : null;
     if (opened && locked(opened)) throw new Error("locked");
     if (current && opened && base !== current.revision) {
@@ -164,7 +162,7 @@ export function writePlainDesk(plain: BankState, base: number | null, actorEmail
       } catch {
         state = next;
       }
-      await keep({ revision, state });
+      await keep(token, { revision, state });
       return { kind: "saved" as const, revision, state: forClient(next, actorEmail) };
     }
     const next = opened && actor && actor.role !== "admin" ? mergeMember(opened, plain, actorEmail ?? "") : plain;
@@ -175,16 +173,17 @@ export function writePlainDesk(plain: BankState, base: number | null, actorEmail
     } catch {
       state = next;
     }
-    await keep({ revision, state });
+    await keep(token, { revision, state });
     return { kind: "saved" as const, revision, state: forClient(next, actorEmail) };
   });
 }
 
 export function withDeskLock<T>(run: (current: DeskFile | null) => Promise<{ file: DeskFile | null; value: T }>) {
+  const token = deskToken();
   return lock(async () => {
-    const current = await currentDesk();
+    const current = await readFirestoreDesk(token);
     const result = await run(current);
-    if (result.file) await keep(result.file);
+    if (result.file) await keep(token, result.file);
     return result.value;
   });
 }

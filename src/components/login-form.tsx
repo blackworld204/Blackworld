@@ -22,17 +22,51 @@ function validEmail(value: string) {
 
 const DESK_OFFLINE = "The desk could not be loaded. Try again.";
 
+function tokenEmail(token: string) {
+  const part = token.split(".")[1];
+  if (!part) return "";
+  try {
+    const payload = JSON.parse(atob(part.replace(/-/g, "+").replace(/_/g, "/"))) as { email?: string };
+    return typeof payload.email === "string" ? payload.email.trim().toLowerCase() : "";
+  } catch {
+    return "";
+  }
+}
+
+function accountOnDesk(mail: string, token: string) {
+  const want = new Set([mail.trim().toLowerCase(), tokenEmail(token)].filter(Boolean));
+  const state = loadBank();
+  for (const email of want) {
+    const found = userByEmail(state, email);
+    if (found) return found;
+  }
+  const pending = state.users.find((user) => user.pendingEmail && want.has(user.pendingEmail.toLowerCase()));
+  if (pending) return pending;
+  if (state.users.length === 1) return state.users[0];
+  return null;
+}
+
+function pause(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /** Firebase Authentication already accepted this email. Open or create its Firestore profile. */
 async function accountFromToken(mail: string, token: string) {
-  const loaded = await adoptDeskToken(token);
-  const found = userByEmail(loadBank(), mail);
-  if (found) return found;
-  if (loaded === "offline") throw new Error(DESK_OFFLINE);
-  const claimed = await claimDeskAccount(token);
-  if (!claimed) throw new Error(DESK_OFFLINE);
-  const account = userByEmail(loadBank(), mail);
-  if (!account) throw new Error(DESK_OFFLINE);
-  return account;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const loaded = await adoptDeskToken(token);
+    const found = accountOnDesk(mail, token);
+    if (found) return found;
+    if (loaded !== "offline") {
+      const claimed = await claimDeskAccount(token);
+      const account = accountOnDesk(mail, token);
+      if (account) return account;
+      if (claimed) return accountOnDesk(mail, token);
+    }
+    await pause(300 * (attempt + 1));
+  }
+  const last = accountOnDesk(mail, token);
+  if (last) return last;
+  throw new Error(DESK_OFFLINE);
 }
 
 function GoogleMark() {

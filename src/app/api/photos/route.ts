@@ -1,6 +1,6 @@
 import { normalizeBank } from "@/lib/bank";
 import { ensureDeskUser, readDesk } from "@/lib/desk-store";
-import { clearStoredPhoto, readStoredPhoto, withDeskAuth, writeStoredPhoto } from "@/lib/firestore-desk";
+import { clearStoredPhoto, deskUnavailable, readStoredPhoto, withDeskAuth, writeStoredPhoto } from "@/lib/firestore-desk";
 import { sameOrigin, signedEmail } from "@/lib/request-guard";
 import { openState } from "@/lib/vault";
 
@@ -14,8 +14,19 @@ async function actor(request: Request) {
   const header = request.headers.get("authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
   if (!token) return null;
-  await withDeskAuth(token, () => ensureDeskUser(email));
-  const desk = await withDeskAuth(token, () => readDesk());
+  try {
+    await withDeskAuth(token, () => ensureDeskUser(email));
+  } catch (error) {
+    if (deskUnavailable(error)) return null;
+    throw error;
+  }
+  let desk;
+  try {
+    desk = await withDeskAuth(token, () => readDesk());
+  } catch (error) {
+    if (deskUnavailable(error)) return null;
+    throw error;
+  }
   if (!desk) return null;
   let plain;
   try {

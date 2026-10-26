@@ -91,19 +91,56 @@ async function authed(path: string, token: string, init?: RequestInit) {
   });
 }
 
+function deskRecord(body: { fields?: Record<string, unknown> } | null): DeskRecord | null {
+  if (!body?.fields) return null;
+  const data = fromValue({ mapValue: { fields: body.fields } }) as (BankState & { bwRevision?: number }) | null;
+  if (!data?.users || !Array.isArray(data.users)) return null;
+  const revision = typeof data.bwRevision === "number" ? data.bwRevision : 0;
+  const { bwRevision: _revision, ...state } = data;
+  return { revision, state: state as BankState };
+}
+
+/** Null means the document is not there. A thrown error means the read failed and must not be treated as an empty book. */
 export async function readFirestoreDesk(token: string): Promise<DeskRecord | null> {
-  for (const bearer of await bearers(token)) {
-    const response = await authed(docName("desks", "presentation"), bearer).catch(() => null);
-    if (!response?.ok) continue;
-    const body = (await response.json().catch(() => null)) as { fields?: Record<string, unknown> } | null;
-    if (!body?.fields) continue;
-    const data = fromValue({ mapValue: { fields: body.fields } }) as (BankState & { bwRevision?: number }) | null;
-    if (!data?.users) continue;
-    const revision = typeof data.bwRevision === "number" ? data.bwRevision : 0;
-    const { bwRevision: _revision, ...state } = data;
-    return { revision, state: state as BankState };
+  let sawMissing = false;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const list = await bearers(token);
+    if (list.length === 0) {
+      sawMissing = false;
+    } else {
+      let retry = false;
+      for (const bearer of list) {
+        const response = await authed(docName("desks", "presentation"), bearer).catch(() => null);
+        if (!response) {
+          retry = true;
+          break;
+        }
+        if (response.status === 404) {
+          sawMissing = true;
+          continue;
+        }
+        if (!response.ok) {
+          if (response.status === 401 || response.status === 403) continue;
+          retry = true;
+          break;
+        }
+        const record = deskRecord((await response.json().catch(() => null)) as { fields?: Record<string, unknown> } | null);
+        if (!record) {
+          retry = true;
+          break;
+        }
+        return record;
+      }
+      if (!retry) break;
+    }
+    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)));
   }
-  return null;
+  if (sawMissing) return null;
+  throw new Error("desk-unavailable");
+}
+
+export function deskUnavailable(error: unknown) {
+  return error instanceof Error && error.message === "desk-unavailable";
 }
 
 export async function writeFirestoreDesk(token: string, desk: DeskRecord) {

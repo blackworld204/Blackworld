@@ -53,7 +53,12 @@ async function handle(request: Request, method: string, path: string[]) {
     if (!email) return json(request, 401, { error: "unauthorized" });
     sessionEmail = email;
     authorization = null;
-    await withDeskAuth(token, () => ensureDeskUser(email));
+    try {
+      await withDeskAuth(token, () => ensureDeskUser(email));
+    } catch (error) {
+      if (error instanceof Error && error.message === "desk-unavailable") return json(request, 503, { error: "unavailable" });
+      throw error;
+    }
   }
   const result = await withDeskAuth(token, () =>
     runAccountCall({

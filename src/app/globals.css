@@ -90,7 +90,7 @@ a { color: inherit; text-decoration: none; }
 
 button, input, select, textarea { font: inherit; color: inherit; }
 
-button { cursor: pointer; }
+button { cursor: pointer; border-radius: var(--radius-btn); }
 
 .sr-only {
   position: absolute;
@@ -301,6 +301,7 @@ button { cursor: pointer; }
   padding: 0 14px;
   background: transparent;
   border: 0;
+  border-radius: 0;
   text-align: start;
 }
 .lang-menu button span,
@@ -1071,7 +1072,7 @@ select {
   min-height: 48px;
   padding: 0 32px 0 12px;
   border: 1px solid var(--line);
-  border-radius: var(--radius-box);
+  border-radius: var(--radius-btn);
   background-color: var(--paper-raised);
   background-image:
     linear-gradient(45deg, transparent 50%, var(--ink) 50%),
@@ -1105,6 +1106,7 @@ select {
   min-height: 44px;
   padding: 0 12px;
   border: 0;
+  border-radius: 0;
   color: var(--ink);
   background: transparent;
   text-align: start;
@@ -1130,7 +1132,7 @@ select {
   min-height: 48px;
   padding: 0 12px;
   border: 1px solid var(--line);
-  border-radius: var(--radius-box);
+  border-radius: var(--radius-btn);
   background: var(--paper-raised);
   text-align: start;
 }
@@ -1297,6 +1299,7 @@ html[dir="rtl"] .date-caret.is-forward { transform: scaleX(-1); }
   min-height: 44px;
   padding: 0 12px;
   border: 0;
+  border-radius: 0;
   color: var(--ink);
   background: transparent;
   text-align: start;
@@ -1790,6 +1793,7 @@ html[dir="rtl"] .date-caret.is-forward { transform: scaleX(-1); }
   min-height: 52px;
   padding: 14px 0;
   border: 0;
+  border-radius: 0;
   background: transparent;
   text-align: start;
   font-family: var(--font-serif), Georgia, serif;
@@ -1858,6 +1862,7 @@ html[dir="rtl"] .date-caret.is-forward { transform: scaleX(-1); }
   min-height: 44px;
   border: 0;
   border-top: 2px solid var(--line);
+  border-radius: 0;
   background: transparent;
   text-align: left;
   padding-top: 8px;
@@ -2544,6 +2549,7 @@ html[dir="rtl"] .date-caret.is-forward { transform: scaleX(-1); }
   width: 100%;
   padding: 14px 12px;
   border: 0;
+  border-radius: 0;
   background: transparent;
   text-align: start;
   min-height: 44px;
@@ -2596,6 +2602,7 @@ html[dir="rtl"] .date-caret.is-forward { transform: scaleX(-1); }
   min-width: 0;
   background: none;
   border: 0;
+  border-radius: 0;
   padding: 0;
   text-align: start;
 }
@@ -3062,6 +3069,7 @@ button.avatar.is-photo { cursor: zoom-in; font: inherit; color: var(--bone); bor
 button.admin-back {
   padding: 0;
   border: 0;
+  border-radius: 0;
   background: transparent;
   text-align: start;
   cursor: pointer;
@@ -3074,6 +3082,7 @@ button.admin-back {
   margin: 0;
   padding: 0;
   border: 0;
+  border-radius: 0;
   background: transparent;
   color: inherit;
   font: inherit;

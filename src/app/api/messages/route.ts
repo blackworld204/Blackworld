@@ -49,7 +49,12 @@ function pace(key: string, limit: number, windowMs: number) {
 
 async function callerIsAdmin(email: string) {
   if (!email) return false;
-  const desk = await readDesk();
+  let desk;
+  try {
+    desk = await readDesk();
+  } catch {
+    return false;
+  }
   if (!desk) return false;
   try {
     const plain = normalizeBank(openState(desk.state));

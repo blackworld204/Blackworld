@@ -26,7 +26,9 @@ function stripPhotos(state: BankState): BankState {
 }
 
 function sameMail(user: BankUser, email: string) {
-  return !user.email.startsWith("bw1.") && user.email.toLowerCase() === email.toLowerCase();
+  const mail = email.trim().toLowerCase();
+  if (!mail || user.email.startsWith("bw1.")) return false;
+  return user.email.toLowerCase() === mail || user.pendingEmail === mail;
 }
 
 /** The desk a signed-in person is allowed to hold. Admins see every account. */

@@ -1,6 +1,5 @@
 import { CURRENCIES, balancesOf, emptyBalances, isMoneyCode, type MoneyCode } from "@/lib/currencies";
 import { isSealed } from "@/lib/sealed";
-import { firebaseAuth } from "@/lib/firebase";
 import { dispatchHooks } from "@/lib/dispatch-hooks";
 import { currentRevision, openRemote, sealRemote, stateNeedsOpen } from "@/lib/vault-client";
 
@@ -311,11 +310,6 @@ export function noteIsQuiet(id: string) {
   return quietNotes.has(id);
 }
 
-function deskProblem(name: string) {
-  if (typeof window === "undefined" || !firebaseAuth()?.currentUser) return;
-  window.dispatchEvent(new Event(name));
-}
-
 function dropStoredCopy() {
   if (typeof window === "undefined") return;
   localStorage.removeItem(KEY);
@@ -344,24 +338,26 @@ export function saveBank(next: BankState) {
   const serial = ++commitSerial;
   void sealRemote(clean).then(async (sealed) => {
     if (serial !== commitSerial) return;
-    if (!sealed) {
+    let saved = sealed ?? (await sealRemote(clean));
+    if (serial !== commitSerial) return;
+    if (!saved) {
       try {
         await persistBank?.(clean);
       } catch {
-        deskProblem("bw-desk-save");
+        /* This tab still has the desk. The next change tries the save again. */
       }
-      if (!persistBank) deskProblem("bw-desk-save");
       return;
     }
-    if (sealed.kind === "conflict") {
-      void replaceBank(sealed.state);
+    const sealedResult = saved;
+    if (sealedResult.kind === "conflict") {
+      void replaceBank(sealedResult.state);
       return;
     }
-    if (sealed.revision < (currentRevision() ?? sealed.revision)) return;
+    if (sealedResult.revision < (currentRevision() ?? sealedResult.revision)) return;
     try {
-      await persistBank?.(sealed.state);
+      await persistBank?.(sealedResult.state);
     } catch {
-      deskProblem("bw-desk-save");
+      /* This tab still has the desk. The next change tries the save again. */
     }
     if (fresh.length) void dispatchHooks(fresh);
   });
@@ -410,13 +406,10 @@ export async function replaceBank(incoming: BankState, token?: string) {
     persistMerged(changed);
     return;
   }
-  const opened = await openRemote(raw, token);
+  let opened = await openRemote(raw, token);
   if (ticket !== replaceSerial) return;
-  if (!opened) {
-    deskProblem("bw-desk-open");
-    if (memory && !stateNeedsOpen(memory)) saveBank(memory);
-    return;
-  }
+  if (!opened) opened = await openRemote(raw, token);
+  if (ticket !== replaceSerial || !opened || stateNeedsOpen(opened)) return;
   applyingRemote = true;
   let changed = false;
   try {
