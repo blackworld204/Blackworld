@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { readFirestoreBox, writeFirestoreBox } from "@/lib/firestore-desk";
 import { isSealed } from "@/lib/sealed";
-import { openText, sealText } from "@/lib/vault";
+import { openText } from "@/lib/vault";
 
 export type InboxMessage = {
   id: string;
@@ -36,14 +36,7 @@ function rowsOf(value: unknown) {
 }
 
 async function writeAll(rows: InboxMessage[]) {
-  const plain = JSON.stringify(rows);
-  let box = plain;
-  try {
-    box = sealText(plain);
-  } catch {
-    box = plain;
-  }
-  await writeFirestoreBox(DOC, box);
+  await writeFirestoreBox(DOC, JSON.stringify(rows));
 }
 
 async function readAll() {

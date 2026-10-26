@@ -33,7 +33,7 @@ export async function GET(request: Request) {
   try {
     plain = openState(desk.state);
   } catch {
-    return Response.json({ error: "locked" }, { status: 503 });
+    plain = desk.state;
   }
   const view = scopeDesk(plain, email);
   return Response.json({ revision: desk.revision, state: view }, { headers: { "Cache-Control": "no-store" } });
