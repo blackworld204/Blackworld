@@ -204,13 +204,11 @@ export default function AdminPage() {
           <span className="admin-mark" aria-hidden="true">
             <Mark name="shield" />
           </span>
-          <div>
-            <h1>{t("Admin panel")}</h1>
-            <p>{t("Accounts, balances, permissions, and notices on this desk.")}</p>
-          </div>
+          <h1>{t("Admin panel")}</h1>
           <Link className="btn btn-primary admin-create" href="/dashboard/create">
             + {t("Create account")}
           </Link>
+          <p>{t("Accounts, balances, permissions, and notices on this desk.")}</p>
         </div>
       </header>
 
