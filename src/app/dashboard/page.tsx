@@ -10,8 +10,9 @@ import { toast } from "@/components/toast";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
-import { MONEY, goalOf, money, patchUser, setGoal, when, type MoneyCode } from "@/lib/bank";
+import { MONEY, currencyLabel, goalOf, money, patchUser, setGoal, when, type MoneyCode } from "@/lib/bank";
 import { cardFaceClass } from "@/lib/card-look";
+import { formatAmountInput, parseAmount } from "@/lib/money-input";
 
 export default function DashboardPage() {
   const { state, user } = useAccount();
@@ -96,7 +97,7 @@ export default function DashboardPage() {
             <div key={code} className={figuresLive.current ? "desk-figures is-live" : "desk-figures"}>
               <div className="desk-balance-top">
                 <div>
-                  <p className="kicker">{t("{code} balance", { code })}</p>
+                  <p className="kicker">{t("{code} balance", { code: currencyLabel(code) })}</p>
                   <p className="desk-figure">{money(user.balances[code], code, locale)}</p>
                 </div>
                 <label className="field desk-currency">
@@ -104,7 +105,10 @@ export default function DashboardPage() {
                   <CurrencySelect
                     label={t("Currency")}
                     value={code}
-                    options={MONEY.map((item) => ({ code: item.code, label: item.code }))}
+                    options={MONEY.map((item) => ({
+                      code: item.code,
+                      label: currencyLabel(item.code),
+                    }))}
                     onChange={(next) => {
                       figuresLive.current = true;
                       const picked = next as MoneyCode;
@@ -129,7 +133,7 @@ export default function DashboardPage() {
             <div className="desk-wallets">
               <p className="kicker">{t("Also held")}</p>
               <div>
-                {MONEY.filter((item) => item.code !== code).map((item) => (
+                {MONEY.filter((item) => item.code !== code && user.balances[item.code] > 0).map((item) => (
                   <button
                     key={item.code}
                     type="button"
@@ -298,7 +302,7 @@ function GoalField({
   onSave: (amount: number) => void;
 }) {
   const { t } = useI18n();
-  const [draft, setDraft] = useState(String(value));
+  const [draft, setDraft] = useState(formatAmountInput(String(value)));
   const [error, setError] = useState("");
   const [ask, setAsk] = useState(false);
 
@@ -307,7 +311,7 @@ function GoalField({
       className="goal-row"
       onSubmit={(event) => {
         event.preventDefault();
-        const amount = Number(draft);
+        const amount = parseAmount(draft);
         if (!Number.isFinite(amount) || amount < 0) {
           setError(t("Enter an amount of zero or more."));
           return;
@@ -318,7 +322,7 @@ function GoalField({
     >
       <label className="field">
         <span>{label}</span>
-        <input inputMode="decimal" value={draft} onChange={(event) => setDraft(event.target.value)} />
+        <input inputMode="decimal" value={draft} onChange={(event) => setDraft(formatAmountInput(event.target.value))} />
       </label>
       <button className="btn btn-ghost btn-sm" type="submit">
         {t("Save")}
@@ -332,7 +336,7 @@ function GoalField({
         onClose={() => setAsk(false)}
         onConfirm={() => {
           setAsk(false);
-          onSave(Number(draft));
+          onSave(parseAmount(draft));
         }}
       />
     </form>

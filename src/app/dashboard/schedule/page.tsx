@@ -7,9 +7,10 @@ import { DateSelect } from "@/components/date-select";
 import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
-import { MONEY, addSchedule, cancelSchedule, money, type MoneyCode } from "@/lib/bank";
+import { MONEY, addSchedule, cancelSchedule, currencyLabel, money, type MoneyCode } from "@/lib/bank";
 import { swiftOfBank } from "@/lib/banks";
 import { CurrencySelect } from "@/components/currency-select";
+import { formatAmountInput, parseAmount } from "@/lib/money-input";
 
 const statusLabel = {
   scheduled: "Scheduled",
@@ -42,7 +43,7 @@ export default function SchedulePage() {
 
   function submit(event: React.FormEvent) {
     event.preventDefault();
-    const value = Number(amount);
+    const value = parseAmount(amount);
     if (holder.trim().length < 2) return setError(t("Enter the account holder."));
     if (!bank) return setError(t("Choose a bank"));
     if (account.trim().length < 4) return setError(t("Enter the account number."));
@@ -57,7 +58,7 @@ export default function SchedulePage() {
   function schedule() {
     if (!user) return;
     setAsk(false);
-    const value = Number(amount);
+    const value = parseAmount(amount);
     void addSchedule({
       userId: user!.id,
       holder: holder.trim(),
@@ -160,14 +161,17 @@ export default function SchedulePage() {
         <div className="split">
           <label className="field">
             <span>{t("Amount")}</span>
-            <input inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} />
+            <input inputMode="decimal" value={amount} onChange={(event) => setAmount(formatAmountInput(event.target.value))} />
           </label>
           <label className="field">
             <span>{t("Currency")}</span>
             <CurrencySelect
               label={t("Currency")}
               value={currency}
-              options={MONEY.map((item) => ({ code: item.code, label: item.code }))}
+              options={MONEY.map((item) => ({
+                code: item.code,
+                label: currencyLabel(item.code),
+              }))}
               onChange={(next) => setCurrency(next as MoneyCode)}
             />
           </label>

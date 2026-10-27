@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CONTACT_EMAIL, CONTACT_PHONE, CONTACT_PHONE_DISPLAY, CONTACT_WHATSAPP } from "@/lib/contact";
+import { CONTACT_EMAIL } from "@/lib/contact";
 import { useI18n } from "@/i18n/provider";
 
 export function Footer() {
@@ -37,10 +37,6 @@ export function Footer() {
           <p>254 San José Street</p>
           <p>San Juan, PR 00901</p>
           <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
-          <a href={`tel:${CONTACT_PHONE}`}>{CONTACT_PHONE_DISPLAY}</a>
-          <a href={CONTACT_WHATSAPP} target="_blank" rel="noopener noreferrer">
-            {t("WhatsApp")}
-          </a>
           <Link href="/support">{t("Contact support")}</Link>
         </div>
       </div>

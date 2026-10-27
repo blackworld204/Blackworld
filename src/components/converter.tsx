@@ -5,15 +5,17 @@ import { CurrencyFlag } from "@/components/currency-flag";
 import { CurrencySelect } from "@/components/currency-select";
 import { useLiveRates } from "@/components/use-live-rates";
 import { useI18n } from "@/i18n/provider";
-import { PREVIEW_CODES, formatAmount, formatQuoteTime, formatRate, quoteConversion } from "@/lib/rates";
 import { localeTag } from "@/lib/bank";
+import { currencyLabel } from "@/lib/currencies";
+import { formatAmountInput, parseAmount } from "@/lib/money-input";
+import { PREVIEW_CODES, formatAmount, formatQuoteTime, formatRate, quoteConversion } from "@/lib/rates";
 
 export function Converter() {
   const { rates, date, asOf, status } = useLiveRates();
-  const [amount, setAmount] = useState("1000");
+  const [amount, setAmount] = useState("1,000");
   const [fromCode, setFromCode] = useState("USD");
   const [toCode, setToCode] = useState("EUR");
-  const [showAll, setShowAll] = useState(false);
+  const [showAll, setShowAll] = useState(true);
   const [error, setError] = useState("");
   const { t, locale } = useI18n();
 
@@ -28,7 +30,7 @@ export function Converter() {
 
   const from = rates.find((item) => item.code === fromCode) ?? rates[0];
   const to = rates.find((item) => item.code === toCode) ?? rates[1];
-  const parsed = Number(amount.replace(/,/g, ""));
+  const parsed = parseAmount(amount);
   const invalid = amount.trim() !== "" && (!Number.isFinite(parsed) || parsed < 0);
   const quoted = !invalid && amount.trim() !== "" && parsed >= 0 ? quoteConversion(parsed, from, to) : null;
   const received = quoted && Number.isFinite(quoted.converted) ? quoted.converted : Number.NaN;
@@ -69,7 +71,7 @@ export function Converter() {
             value={amount}
             aria-invalid={Boolean(error)}
             onChange={(event) => {
-              setAmount(event.target.value);
+              setAmount(formatAmountInput(event.target.value));
               setError("");
             }}
           />
@@ -80,7 +82,7 @@ export function Converter() {
             value={fromCode}
             options={rates.map((currency) => ({
               code: currency.code,
-              label: `${currency.code} · ${t(currency.name)}`,
+              label: currencyLabel(currency.code),
             }))}
             onChange={setFromCode}
           />
@@ -99,7 +101,7 @@ export function Converter() {
         <p className="receive-value rate-tick" key={asOf ?? "receive"}>
           {status === "loading" || !Number.isFinite(received) ? "—" : formatAmount(to.code, received)}
           <span>
-            <CurrencyFlag code={to.code} /> {to.code}
+            <CurrencyFlag code={to.code} /> {currencyLabel(to.code)}
           </span>
         </p>
         <div className="field">
@@ -108,7 +110,7 @@ export function Converter() {
             value={toCode}
             options={rates.map((currency) => ({
               code: currency.code,
-              label: `${currency.code} · ${t(currency.name)}`,
+              label: currencyLabel(currency.code),
             }))}
             onChange={setToCode}
           />
@@ -119,10 +121,10 @@ export function Converter() {
               <>
                 <span>1</span>
                 <CurrencyFlag code={from.code} />
-                <span>{from.code}</span>
+                <span>{currencyLabel(from.code)}</span>
                 <span>= {formatRate(pair)}</span>
                 <CurrencyFlag code={to.code} />
-                <span>{to.code}</span>
+                <span>{currencyLabel(to.code)}</span>
               </>
             ) : (
               t("Rate unavailable")
@@ -134,7 +136,7 @@ export function Converter() {
             {t("Fee")} {Number.isFinite(fee) ? formatAmount(from.code, fee) : "—"}
           </span>
           <CurrencyFlag code={from.code} />
-          <span>{from.code} · 0.5%</span>
+          <span>{currencyLabel(from.code)} · 0.5%</span>
         </p>
         {error ? (
           <p className="form-error" role="alert">
@@ -154,9 +156,8 @@ export function Converter() {
             <li key={currency.code}>
               <span className="ccy-code">
                 <CurrencyFlag code={currency.code} />
-                <span className="mono">{currency.code}</span>
+                <span className="mono">{currencyLabel(currency.code)}</span>
               </span>
-              <span>{t(currency.name)}</span>
               <span className="num rate-tick" key={asOf ?? currency.code}>
                 {formatRate(currency.perUsd)}
               </span>

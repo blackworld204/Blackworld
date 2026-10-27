@@ -1,4 +1,4 @@
-import { CURRENCIES } from "@/lib/currencies";
+import { CURRENCIES, isFrankfurterCode, moneyDigits } from "@/lib/currencies";
 
 export type Currency = {
   code: string;
@@ -12,21 +12,6 @@ export const SANDBOX_RATES: Currency[] = CURRENCIES.map((item) => ({
   perUsd: item.perUsd,
 }));
 
-const FRANKFURTER = new Set([
-  "EUR",
-  "GBP",
-  "JPY",
-  "CHF",
-  "CAD",
-  "AUD",
-  "CNY",
-  "SGD",
-  "INR",
-  "ZAR",
-  "BRL",
-  "MXN",
-]);
-
 export const PREVIEW_CODES = ["USD", "EUR", "GBP", "JPY", "CHF"];
 
 export const FEE_RATE = 0.005;
@@ -38,7 +23,7 @@ export function convert(amount: number, from: Currency, to: Currency) {
 }
 
 export function roundMoney(code: string, value: number) {
-  const factor = code === "JPY" ? 1 : 100;
+  const factor = moneyDigits(code) === 0 ? 1 : 100;
   return Math.round(value * factor) / factor;
 }
 
@@ -52,7 +37,7 @@ export function quoteConversion(amount: number, from: Currency, to: Currency) {
 }
 
 export function formatAmount(code: string, value: number) {
-  const digits = code === "JPY" ? 0 : 2;
+  const digits = moneyDigits(code);
   return new Intl.NumberFormat("en-US", {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
@@ -82,7 +67,7 @@ export function formatQuoteTime(asOf: string, locale: string) {
 }
 
 export async function loadLiveRates(signal?: AbortSignal): Promise<RateBook> {
-  const codes = SANDBOX_RATES.filter((item) => item.code !== "USD" && FRANKFURTER.has(item.code))
+  const codes = SANDBOX_RATES.filter((item) => item.code !== "USD" && isFrankfurterCode(item.code))
     .map((item) => item.code)
     .join(",");
   const response = await fetch(`https://api.frankfurter.dev/v1/latest?from=USD&to=${codes}`, { signal });

@@ -11,7 +11,9 @@ import { useI18n } from "@/i18n/provider";
 import { authErrorMessage } from "@/components/session";
 import { addressSchema, collectErrors, personalSchema, securitySchema } from "@/lib/account-schema";
 import { addUser, money, type BankAddress } from "@/lib/bank";
+import { WORLD_COUNTRIES } from "@/lib/countries";
 import { createPresentationUser } from "@/lib/firebase";
+import { formatAmountInput, parseAmount } from "@/lib/money-input";
 
 const empty = {
   first: "",
@@ -20,7 +22,7 @@ const empty = {
   password: "",
   confirmPassword: "",
   phone: "",
-  balance: "10000",
+  balance: "10,000",
   street: "",
   city: "",
   zip: "",
@@ -82,7 +84,7 @@ export default function CreateAccountPage() {
   }
 
   const name = `${form.first.trim()} ${form.last.trim()}`.trim();
-  const balance = Number(form.balance);
+  const balance = parseAmount(form.balance);
   const address: BankAddress | undefined =
     form.street.trim() || form.city.trim() || form.zip.trim()
       ? {
@@ -304,7 +306,7 @@ export default function CreateAccountPage() {
               inputMode="decimal"
               value={form.balance}
               aria-invalid={Boolean(errors.balance)}
-              onChange={(event) => set("balance", event.target.value)}
+              onChange={(event) => set("balance", formatAmountInput(event.target.value))}
             />
             {note("balance")}
           </label>
@@ -346,11 +348,17 @@ export default function CreateAccountPage() {
           </div>
           <label className="field">
             <span>{t("Country")}</span>
-            <input
+            <select
               value={form.country}
               autoComplete="country-name"
               onChange={(event) => set("country", event.target.value)}
-            />
+            >
+              {WORLD_COUNTRIES.map((item) => (
+                <option key={item.code} value={item.name}>
+                  {t(item.name)}
+                </option>
+              ))}
+            </select>
           </label>
           {note("_form")}
           <div className="form-row">

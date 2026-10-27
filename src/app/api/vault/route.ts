@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { normalizeBank, type BankState } from "@/lib/bank";
 import { writePlainDesk } from "@/lib/desk-store";
-import { withDeskAuth } from "@/lib/firestore-desk";
+import { deskUnavailable, withDeskAuth } from "@/lib/firestore-desk";
 import { scopeDesk } from "@/lib/desk-scope";
 import { sameOrigin, signedEmail, signedIn } from "@/lib/request-guard";
 import { isSealed } from "@/lib/sealed";
@@ -10,6 +10,7 @@ import { openState, openText } from "@/lib/vault";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const hits = new Map<string, number[]>();
 
@@ -83,7 +84,10 @@ export async function POST(request: Request) {
       { state: saved.state, revision: saved.revision, conflict: saved.kind === "conflict" },
       { status, headers: { "Cache-Control": "no-store" } },
     );
-  } catch {
+  } catch (error) {
+    if (deskUnavailable(error) || (error instanceof Error && error.message === "firestore")) {
+      return Response.json({ error: "unavailable" }, { status: 503 });
+    }
     return Response.json({ error: "failed" }, { status: 400 });
   }
 }

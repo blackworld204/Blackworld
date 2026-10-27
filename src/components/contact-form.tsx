@@ -5,7 +5,7 @@ import { useState } from "react";
 import { BusyButton } from "@/components/busy-button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useI18n } from "@/i18n/provider";
-import { CONTACT_EMAIL, CONTACT_PHONE, CONTACT_PHONE_DISPLAY, CONTACT_WHATSAPP } from "@/lib/contact";
+import { CONTACT_EMAIL } from "@/lib/contact";
 import { messageFailure } from "@/lib/message-error";
 
 function validEmail(value: string) {
@@ -193,12 +193,6 @@ export function ContactForm({
         <header className="page-intro">
           <h1>{t(title)}</h1>
           <p className="lede">
-            <a href={`tel:${CONTACT_PHONE}`}>{CONTACT_PHONE_DISPLAY}</a>
-            {" · "}
-            <a href={CONTACT_WHATSAPP} target="_blank" rel="noopener noreferrer">
-              {t("WhatsApp")}
-            </a>
-            {" · "}
             <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
           </p>
         </header>

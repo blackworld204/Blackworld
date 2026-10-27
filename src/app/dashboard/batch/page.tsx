@@ -11,7 +11,8 @@ import { useI18n } from "@/i18n/provider";
 import { MONEY, money, transferFee, type MoneyCode } from "@/lib/bank";
 import { postAccount } from "@/lib/flow-api";
 import { swiftOfBank } from "@/lib/banks";
-import { emptyBalances } from "@/lib/currencies";
+import { currencyLabel, emptyBalances } from "@/lib/currencies";
+import { formatAmountInput, parseAmount } from "@/lib/money-input";
 
 type Line = { holder: string; account: string; amount: string; currency: MoneyCode };
 
@@ -44,7 +45,7 @@ export default function BatchPage() {
     if (routing.trim().length < 4 && swift.trim().length < 6) return setError(t("Enter a US routing number or a SWIFT code."));
     if (pin !== user?.pin) return setError(t("PIN does not match this account."));
     const ready = lines
-      .map((line) => ({ ...line, value: Number(line.amount) }))
+      .map((line) => ({ ...line, value: parseAmount(line.amount) }))
       .filter((line) => line.holder.trim() || line.account.trim() || line.amount.trim());
     if (ready.length === 0) return setError(t("Enter at least one transfer."));
     for (const line of ready) {
@@ -152,7 +153,7 @@ export default function BatchPage() {
               </label>
               <label className="field">
                 <span>{t("Amount")}</span>
-                <input inputMode="decimal" value={line.amount} onChange={(event) => update(index, { amount: event.target.value })} />
+                <input inputMode="decimal" value={line.amount} onChange={(event) => update(index, { amount: formatAmountInput(event.target.value) })} />
               </label>
             </div>
             <label className="field">
@@ -160,11 +161,14 @@ export default function BatchPage() {
               <CurrencySelect
                 label={t("Currency")}
                 value={line.currency}
-                options={MONEY.map((item) => ({ code: item.code, label: item.code }))}
+                options={MONEY.map((item) => ({
+                  code: item.code,
+                  label: currencyLabel(item.code),
+                }))}
                 onChange={(next) => update(index, { currency: next as MoneyCode })}
               />
             </label>
-            <p className="muted">{t("Fee {fee}", { fee: money(transferFee(Number(line.amount) || 0), line.currency, locale) })}</p>
+            <p className="muted">{t("Fee {fee}", { fee: money(transferFee(parseAmount(line.amount) || 0), line.currency, locale) })}</p>
             {lines.length > 1 ? (
               <button type="button" className="text-button" onClick={() => setLines((current) => current.filter((_, i) => i !== index))}>
                 {t("Remove line")}

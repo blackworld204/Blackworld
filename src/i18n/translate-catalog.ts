@@ -9,14 +9,79 @@ import { writtenLocale } from "@/i18n/written";
 
 type Engine = "edge" | "google";
 
-const CACHE_DIR = path.join(process.cwd(), "data", "i18n-cache");
 const pending = new Map<string, Promise<Record<string, string>>>();
+const extraPending = new Map<string, Promise<Record<string, string>>>();
 
 export class UnsupportedLanguage extends Error {}
 
 const sourceKeys = Object.keys(source);
 const extraKeys = extraSource as string[];
-const extraPending = new Map<string, Promise<Record<string, string>>>();
+
+function fillMissing(parsed: Record<string, string>, keys: string[]) {
+  const table: Record<string, string> = {};
+  let hits = 0;
+  for (const key of keys) {
+    const value = parsed[key];
+    if (typeof value === "string") {
+      table[key] = value;
+      hits += 1;
+    } else {
+      table[key] = key;
+    }
+  }
+  return hits > 0 ? table : null;
+}
+
+async function readJson(file: string) {
+  try {
+    return JSON.parse(await readFile(file, "utf8")) as Record<string, string>;
+  } catch {
+    return null;
+  }
+}
+
+function shippedPath(name: string) {
+  return path.join(process.cwd(), "src", "i18n", "cache", name);
+}
+
+function cachePath(name: string) {
+  return path.join(process.cwd(), "data", "i18n-cache", name);
+}
+
+function tmpPath(name: string) {
+  return path.join(/*turbopackIgnore: true*/ "/tmp", "blackworld-i18n-cache", name);
+}
+
+/** Prefer shipped packs, then runtime cache. Shipped partial packs fill gaps with English. */
+async function readPack(name: string, keys: string[]) {
+  const shipped = await readJson(shippedPath(name));
+  if (shipped && typeof shipped === "object") {
+    if (keys.every((key) => typeof shipped[key] === "string")) return shipped;
+    // Live hosts often cannot reach Google/Edge; a partial pack is better than a 503.
+    if (Object.keys(shipped).length > 0) {
+      return fillMissing(shipped, keys);
+    }
+  }
+  const cached = await readJson(cachePath(name));
+  if (cached && typeof cached === "object" && keys.every((key) => typeof cached[key] === "string")) {
+    return cached;
+  }
+  return null;
+}
+
+async function writePack(name: string, table: Record<string, string>) {
+  for (const file of [cachePath(name), tmpPath(name)]) {
+    try {
+      await mkdir(path.dirname(file), { recursive: true });
+      const temp = `${file}.${process.pid}.tmp`;
+      await writeFile(temp, JSON.stringify(table));
+      await rename(temp, file);
+      return;
+    } catch {
+      /* try the next writable directory */
+    }
+  }
+}
 
 function shield(text: string) {
   const tokens: string[] = [];
@@ -68,6 +133,12 @@ function textsFrom(data: unknown, expected: number) {
   throw new Error("shape");
 }
 
+function googleTranslateUrl(code: string, texts: string[]) {
+  const params = new URLSearchParams({ client: "dict-chrome-ex", sl: "en", tl: code });
+  for (const text of texts) params.append("q", text);
+  return `https://clients5.google.com/translate_a/t?${params.toString()}`;
+}
+
 async function request(engine: Engine, code: string, texts: string[], attempt = 0): Promise<string[]> {
   const response =
     engine === "edge"
@@ -79,14 +150,7 @@ async function request(engine: Engine, code: string, texts: string[], attempt = 
             body: JSON.stringify(texts),
           },
         )
-      : await fetch(
-          `https://clients5.google.com/translate_a/t?${(() => {
-            const params = new URLSearchParams({ client: "dict-chrome-ex", sl: "en", tl: code });
-            for (const text of texts) params.append("q", text);
-            return params.toString();
-          })()}`,
-          { headers: { "User-Agent": "Mozilla/5.0" } },
-        );
+      : await fetch(googleTranslateUrl(code, texts), { headers: { "User-Agent": "Mozilla/5.0" } });
   if ((response.status === 429 || response.status >= 500) && attempt < 4) {
     await sleep(800 * 2 ** attempt);
     return request(engine, code, texts, attempt + 1);
@@ -106,7 +170,7 @@ async function request(engine: Engine, code: string, texts: string[], attempt = 
 
 async function translateGroup(engine: Engine, code: string, locale: string, texts: string[]): Promise<string[]> {
   const other: Engine = engine === "edge" ? "google" : "edge";
-  const otherCode = other === "google" ? locale : code;
+  const otherCode = other === "google" ? googleCode(locale) : code;
   try {
     return await request(engine, code, texts);
   } catch {
@@ -133,26 +197,16 @@ async function translateAll(engine: Engine, code: string, locale: string, texts:
 }
 
 async function readCache(locale: string) {
-  try {
-    const parsed = JSON.parse(await readFile(path.join(CACHE_DIR, `${locale}.json`), "utf8")) as Record<string, string>;
-    if (sourceKeys.every((key) => typeof parsed[key] === "string")) return parsed;
-  } catch {
-    return null;
-  }
-  return null;
+  return readPack(`${locale}.json`, sourceKeys);
 }
 
 async function writeCache(locale: string, table: Record<string, string>) {
-  await mkdir(CACHE_DIR, { recursive: true });
-  const file = path.join(CACHE_DIR, `${locale}.json`);
-  const temp = `${file}.${process.pid}.tmp`;
-  await writeFile(temp, JSON.stringify(table));
-  await rename(temp, file);
+  await writePack(`${locale}.json`, table);
 }
 
 async function probe(locale: string) {
   try {
-    const [text] = await request("google", locale, ["The bank behind the product."]);
+    const [text] = await request("google", googleCode(locale), ["The bank behind the product."]);
     return text.trim().toLowerCase() !== "the bank behind the product.";
   } catch {
     return false;
@@ -163,8 +217,8 @@ async function translateLocale(locale: string) {
   const cached = await readCache(locale);
   if (cached) return cached;
   const spec = (engineCodes as Record<string, { engine: Engine; code: string }>)[locale];
-  let engine: Engine = spec?.engine ?? "google";
-  let code = spec?.code ?? locale;
+  const engine: Engine = spec?.engine ?? "google";
+  const code = spec?.code ?? googleCode(locale);
   if (!spec && !(await probe(locale))) throw new UnsupportedLanguage(locale);
   const shielded = sourceKeys.map(shield);
   const translated = await translateAll(
@@ -192,13 +246,7 @@ function googleCode(locale: string) {
 }
 
 async function readExtra(locale: string) {
-  try {
-    const parsed = JSON.parse(await readFile(path.join(CACHE_DIR, `extra-${locale}.json`), "utf8")) as Record<string, string>;
-    if (extraKeys.every((key) => typeof parsed[key] === "string")) return parsed;
-  } catch {
-    return null;
-  }
-  return null;
+  return readPack(`extra-${locale}.json`, extraKeys);
 }
 
 export function translateExtras(locale: string) {
@@ -225,13 +273,11 @@ export function translateExtras(locale: string) {
         table[key] = key;
       }
     });
-    await mkdir(CACHE_DIR, { recursive: true });
-    const file = path.join(CACHE_DIR, `extra-${locale}.json`);
-    const temp = `${file}.${process.pid}.tmp`;
-    await writeFile(temp, JSON.stringify(table));
-    await rename(temp, file);
+    await writePack(`extra-${locale}.json`, table);
     return table;
-  })().finally(() => extraPending.delete(locale));
+  })().finally(() => {
+    extraPending.delete(locale);
+  });
   extraPending.set(locale, job);
   return job;
 }
@@ -254,7 +300,9 @@ export function loadTranslation(locale: string) {
         return table;
       }
     })
-    .finally(() => pending.delete(locale));
+    .finally(() => {
+      pending.delete(locale);
+    });
   pending.set(locale, job);
   return job;
 }

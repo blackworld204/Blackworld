@@ -2,12 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { CurrencyFlag } from "@/components/currency-flag";
+import { CurrencySelect } from "@/components/currency-select";
 import { Glyph } from "@/components/glyph";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
 import { downloadCsv } from "@/lib/csv";
-import { MONEY, localeTag, money, when, type BankTx, type MoneyCode } from "@/lib/bank";
+import { MONEY, currencyLabel, localeTag, money, when, type BankTx, type MoneyCode } from "@/lib/bank";
 
 export default function TransactionsPage() {
   const { state, user } = useAccount();
@@ -17,6 +18,16 @@ export default function TransactionsPage() {
   const [direction, setDirection] = useState<"all" | "in" | "out">("all");
   const [currency, setCurrency] = useState<"all" | MoneyCode>("all");
   const [open, setOpen] = useState<string | null>(null);
+  const currencyOptions = useMemo(
+    () => [
+      { code: "all", label: t("All currencies") },
+      ...MONEY.map((item) => ({
+        code: item.code,
+        label: currencyLabel(item.code),
+      })),
+    ],
+    [t],
+  );
 
   const rows = useMemo(() => {
     if (!state || !user) return [];
@@ -62,22 +73,15 @@ export default function TransactionsPage() {
           </button>
         ))}
       </div>
-      <div className="filter-row tx-currencies" role="group" aria-label={t("Currency")}>
-        <button type="button" className="btn btn-ghost btn-sm" aria-pressed={currency === "all"} onClick={() => setCurrency("all")}>
-          {t("All")}
-        </button>
-        {MONEY.map((item) => (
-          <button
-            key={item.code}
-            type="button"
-            className="btn btn-ghost btn-sm"
-            aria-pressed={currency === item.code}
-            onClick={() => setCurrency(item.code)}
-          >
-            {item.code}
-          </button>
-        ))}
-      </div>
+      <label className="field tx-currency-filter">
+        <span>{t("Currency")}</span>
+        <CurrencySelect
+          label={t("Currency")}
+          value={currency}
+          options={currencyOptions}
+          onChange={(next) => setCurrency(next === "all" ? "all" : (next as MoneyCode))}
+        />
+      </label>
       <button
         className="btn btn-ghost btn-sm"
         type="button"

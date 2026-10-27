@@ -8,6 +8,7 @@ import { RequireSession } from "@/components/require-session";
 import { SignOutButton } from "@/components/sign-out-button";
 import { BankProvider, useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
+import { hasTransferPin } from "@/lib/bank";
 
 const ADMIN_ROUTES = [
   "/dashboard/admin",
@@ -17,8 +18,16 @@ const ADMIN_ROUTES = [
   "/dashboard/team",
 ];
 
+const PIN_ROUTES = ["/dashboard/send", "/dashboard/batch", "/dashboard/schedule"];
+
 function adminRoute(path: string) {
   return ADMIN_ROUTES.some(
+    (route) => path === route || path.startsWith(`${route}/`),
+  );
+}
+
+function pinRoute(path: string) {
+  return PIN_ROUTES.some(
     (route) => path === route || path.startsWith(`${route}/`),
   );
 }
@@ -47,9 +56,15 @@ function AccountGate({ children }: { children: React.ReactNode }) {
   const adminDesk = user?.role === "admin" && user.status === "active";
   const allowed = adminRoute(path);
 
+  const needsPin = Boolean(user && user.status === "active" && pinRoute(path) && !hasTransferPin(user));
+
   useEffect(() => {
     if (adminDesk && !allowed) router.replace("/dashboard/admin");
   }, [adminDesk, allowed, router]);
+
+  useEffect(() => {
+    if (needsPin) router.replace(`/dashboard/pin?next=${encodeURIComponent(path)}`);
+  }, [needsPin, path, router]);
 
   if (!state) return <div className="app-hold" />;
   if (adminDesk && !allowed) return <div className="app-hold" />;
@@ -67,6 +82,7 @@ function AccountGate({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
+  if (needsPin) return <div className="app-hold" />;
   return (
     <>
       <DeskRunner />

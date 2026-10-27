@@ -1,942 +1,942 @@
 {
-  "aa": {
-    "engine": "google",
-    "code": "aa"
-  },
-  "ab": {
-    "engine": "google",
-    "code": "ab"
-  },
-  "ace": {
-    "engine": "google",
-    "code": "ace"
-  },
-  "ach": {
-    "engine": "google",
-    "code": "ach"
-  },
-  "af": {
-    "engine": "edge",
-    "code": "af"
-  },
-  "ak": {
-    "engine": "google",
-    "code": "ak"
-  },
-  "alz": {
-    "engine": "google",
-    "code": "alz"
-  },
-  "am": {
-    "engine": "edge",
-    "code": "am"
-  },
-  "as": {
-    "engine": "edge",
-    "code": "as"
-  },
-  "av": {
-    "engine": "google",
-    "code": "av"
-  },
-  "awa": {
-    "engine": "google",
-    "code": "awa"
-  },
-  "ay": {
-    "engine": "google",
-    "code": "ay"
-  },
-  "az": {
-    "engine": "edge",
-    "code": "az"
-  },
-  "ba": {
-    "engine": "edge",
-    "code": "ba"
-  },
-  "bal": {
-    "engine": "google",
-    "code": "bal"
-  },
-  "ban": {
-    "engine": "google",
-    "code": "ban"
-  },
-  "bbc": {
-    "engine": "google",
-    "code": "bbc"
-  },
-  "bci": {
-    "engine": "google",
-    "code": "bci"
-  },
-  "be": {
-    "engine": "edge",
-    "code": "be"
-  },
-  "bem": {
-    "engine": "google",
-    "code": "bem"
-  },
-  "bew": {
-    "engine": "google",
-    "code": "bew"
-  },
-  "bg": {
-    "engine": "edge",
-    "code": "bg"
-  },
-  "bh": {
-    "engine": "google",
-    "code": "bh"
-  },
-  "bho": {
-    "engine": "edge",
-    "code": "bho"
-  },
-  "bik": {
-    "engine": "google",
-    "code": "bik"
-  },
-  "bm": {
-    "engine": "google",
-    "code": "bm"
-  },
-  "bn": {
-    "engine": "edge",
-    "code": "bn"
-  },
-  "bo": {
-    "engine": "edge",
-    "code": "bo"
-  },
-  "br": {
-    "engine": "google",
-    "code": "br"
-  },
-  "brx": {
-    "engine": "edge",
-    "code": "brx"
-  },
-  "bs": {
-    "engine": "edge",
-    "code": "bs"
-  },
-  "bts": {
-    "engine": "google",
-    "code": "bts"
-  },
-  "btx": {
-    "engine": "google",
-    "code": "btx"
-  },
-  "bua": {
-    "engine": "google",
-    "code": "bua"
-  },
-  "bxr": {
-    "engine": "google",
-    "code": "bxr"
-  },
-  "ca": {
-    "engine": "edge",
-    "code": "ca"
-  },
-  "ce": {
-    "engine": "google",
-    "code": "ce"
-  },
-  "ceb": {
-    "engine": "google",
-    "code": "ceb"
-  },
-  "cgg": {
-    "engine": "google",
-    "code": "cgg"
-  },
-  "ch": {
-    "engine": "google",
-    "code": "ch"
-  },
-  "chk": {
-    "engine": "google",
-    "code": "chk"
-  },
-  "chm": {
-    "engine": "google",
-    "code": "chm"
-  },
-  "ckb": {
-    "engine": "google",
-    "code": "ckb"
-  },
-  "cnh": {
-    "engine": "google",
-    "code": "cnh"
-  },
-  "co": {
-    "engine": "google",
-    "code": "co"
-  },
-  "crh": {
-    "engine": "google",
-    "code": "crh"
-  },
-  "crs": {
-    "engine": "google",
-    "code": "crs"
-  },
-  "cs": {
-    "engine": "edge",
-    "code": "cs"
-  },
-  "cv": {
-    "engine": "google",
-    "code": "cv"
-  },
-  "cy": {
-    "engine": "edge",
-    "code": "cy"
-  },
-  "da": {
-    "engine": "edge",
-    "code": "da"
-  },
-  "din": {
-    "engine": "google",
-    "code": "din"
-  },
-  "doi": {
-    "engine": "edge",
-    "code": "doi"
-  },
-  "dov": {
-    "engine": "google",
-    "code": "dov"
-  },
-  "dsb": {
-    "engine": "edge",
-    "code": "dsb"
-  },
-  "dv": {
-    "engine": "edge",
-    "code": "dv"
-  },
-  "dyu": {
-    "engine": "google",
-    "code": "dyu"
-  },
-  "dz": {
-    "engine": "google",
-    "code": "dz"
-  },
-  "ee": {
-    "engine": "google",
-    "code": "ee"
-  },
-  "el": {
-    "engine": "edge",
-    "code": "el"
-  },
-  "eo": {
-    "engine": "google",
-    "code": "eo"
-  },
-  "et": {
-    "engine": "edge",
-    "code": "et"
-  },
-  "eu": {
-    "engine": "edge",
-    "code": "eu"
-  },
-  "fa": {
-    "engine": "edge",
-    "code": "fa"
-  },
-  "ff": {
-    "engine": "google",
-    "code": "ff"
-  },
-  "fi": {
-    "engine": "edge",
-    "code": "fi"
-  },
-  "fj": {
-    "engine": "edge",
-    "code": "fj"
-  },
-  "fo": {
-    "engine": "edge",
-    "code": "fo"
-  },
-  "fon": {
-    "engine": "google",
-    "code": "fon"
-  },
-  "fur": {
-    "engine": "google",
-    "code": "fur"
-  },
-  "fy": {
-    "engine": "google",
-    "code": "fy"
-  },
-  "ga": {
-    "engine": "edge",
-    "code": "ga"
-  },
-  "gaa": {
-    "engine": "google",
-    "code": "gaa"
-  },
-  "gd": {
-    "engine": "google",
-    "code": "gd"
-  },
-  "gl": {
-    "engine": "edge",
-    "code": "gl"
-  },
-  "gn": {
-    "engine": "google",
-    "code": "gn"
-  },
-  "gom": {
-    "engine": "edge",
-    "code": "gom"
-  },
-  "gu": {
-    "engine": "edge",
-    "code": "gu"
-  },
-  "gv": {
-    "engine": "google",
-    "code": "gv"
-  },
-  "ha": {
-    "engine": "edge",
-    "code": "ha"
-  },
-  "haw": {
-    "engine": "google",
-    "code": "haw"
-  },
-  "he": {
-    "engine": "edge",
-    "code": "he"
-  },
-  "hil": {
-    "engine": "google",
-    "code": "hil"
-  },
-  "hmn": {
-    "engine": "google",
-    "code": "hmn"
-  },
-  "hne": {
-    "engine": "edge",
-    "code": "hne"
-  },
-  "hr": {
-    "engine": "edge",
-    "code": "hr"
-  },
-  "hrx": {
-    "engine": "google",
-    "code": "hrx"
-  },
-  "hsb": {
-    "engine": "edge",
-    "code": "hsb"
-  },
-  "ht": {
-    "engine": "edge",
-    "code": "ht"
-  },
-  "hu": {
-    "engine": "edge",
-    "code": "hu"
-  },
-  "hy": {
-    "engine": "edge",
-    "code": "hy"
-  },
-  "iba": {
-    "engine": "google",
-    "code": "iba"
-  },
-  "ig": {
-    "engine": "edge",
-    "code": "ig"
-  },
-  "ikt": {
-    "engine": "edge",
-    "code": "ikt"
-  },
-  "ilo": {
-    "engine": "google",
-    "code": "ilo"
-  },
-  "is": {
-    "engine": "edge",
-    "code": "is"
-  },
-  "it": {
-    "engine": "edge",
-    "code": "it"
-  },
-  "iu": {
-    "engine": "edge",
-    "code": "iu"
-  },
-  "jam": {
-    "engine": "google",
-    "code": "jam"
-  },
-  "jv": {
-    "engine": "google",
-    "code": "jv"
-  },
-  "ka": {
-    "engine": "edge",
-    "code": "ka"
-  },
-  "kac": {
-    "engine": "google",
-    "code": "kac"
-  },
-  "kek": {
-    "engine": "google",
-    "code": "kek"
-  },
-  "kg": {
-    "engine": "google",
-    "code": "kg"
-  },
-  "kha": {
-    "engine": "google",
-    "code": "kha"
-  },
-  "kk": {
-    "engine": "edge",
-    "code": "kk"
-  },
-  "kl": {
-    "engine": "google",
-    "code": "kl"
-  },
-  "km": {
-    "engine": "edge",
-    "code": "km"
-  },
-  "kmr": {
-    "engine": "edge",
-    "code": "kmr"
-  },
-  "kn": {
-    "engine": "edge",
-    "code": "kn"
-  },
-  "kr": {
-    "engine": "google",
-    "code": "kr"
-  },
-  "kri": {
-    "engine": "google",
-    "code": "kri"
-  },
-  "ks": {
-    "engine": "edge",
-    "code": "ks"
-  },
-  "ktu": {
-    "engine": "google",
-    "code": "ktu"
-  },
-  "ku": {
-    "engine": "edge",
-    "code": "ku"
-  },
-  "kv": {
-    "engine": "google",
-    "code": "kv"
-  },
-  "ky": {
-    "engine": "edge",
-    "code": "ky"
-  },
-  "la": {
-    "engine": "google",
-    "code": "la"
-  },
-  "lb": {
-    "engine": "edge",
-    "code": "lb"
-  },
-  "lg": {
-    "engine": "edge",
-    "code": "lug"
-  },
-  "li": {
-    "engine": "google",
-    "code": "li"
-  },
-  "lij": {
-    "engine": "google",
-    "code": "lij"
-  },
-  "lmo": {
-    "engine": "google",
-    "code": "lmo"
-  },
-  "ln": {
-    "engine": "edge",
-    "code": "ln"
-  },
-  "lo": {
-    "engine": "edge",
-    "code": "lo"
-  },
-  "lt": {
-    "engine": "edge",
-    "code": "lt"
-  },
-  "ltg": {
-    "engine": "google",
-    "code": "ltg"
-  },
-  "lua": {
-    "engine": "google",
-    "code": "lua"
-  },
-  "luo": {
-    "engine": "google",
-    "code": "luo"
-  },
-  "lus": {
-    "engine": "google",
-    "code": "lus"
-  },
-  "lv": {
-    "engine": "edge",
-    "code": "lv"
-  },
-  "mad": {
-    "engine": "google",
-    "code": "mad"
-  },
-  "mai": {
-    "engine": "edge",
-    "code": "mai"
-  },
-  "mak": {
-    "engine": "google",
-    "code": "mak"
-  },
-  "mam": {
-    "engine": "google",
-    "code": "mam"
-  },
-  "mfe": {
-    "engine": "google",
-    "code": "mfe"
-  },
-  "mg": {
-    "engine": "edge",
-    "code": "mg"
-  },
-  "mh": {
-    "engine": "google",
-    "code": "mh"
-  },
-  "mi": {
-    "engine": "edge",
-    "code": "mi"
-  },
-  "min": {
-    "engine": "google",
-    "code": "min"
-  },
-  "mk": {
-    "engine": "edge",
-    "code": "mk"
-  },
-  "ml": {
-    "engine": "edge",
-    "code": "ml"
-  },
-  "mn": {
-    "engine": "edge",
-    "code": "mn-Cyrl"
-  },
-  "mni": {
-    "engine": "edge",
-    "code": "mni"
-  },
-  "mr": {
-    "engine": "edge",
-    "code": "mr"
-  },
-  "mt": {
-    "engine": "edge",
-    "code": "mt"
-  },
-  "mwr": {
-    "engine": "google",
-    "code": "mwr"
-  },
-  "mww": {
-    "engine": "edge",
-    "code": "mww"
-  },
-  "my": {
-    "engine": "edge",
-    "code": "my"
-  },
-  "nb": {
-    "engine": "edge",
-    "code": "nb"
-  },
-  "ne": {
-    "engine": "edge",
-    "code": "ne"
-  },
-  "new": {
-    "engine": "google",
-    "code": "new"
-  },
-  "nhe": {
-    "engine": "google",
-    "code": "nhe"
-  },
-  "nl": {
-    "engine": "edge",
-    "code": "nl"
-  },
-  "no": {
-    "engine": "edge",
-    "code": "nb"
-  },
-  "nr": {
-    "engine": "google",
-    "code": "nr"
-  },
-  "nso": {
-    "engine": "edge",
-    "code": "nso"
-  },
-  "nus": {
-    "engine": "google",
-    "code": "nus"
-  },
-  "ny": {
-    "engine": "edge",
-    "code": "nya"
-  },
-  "oc": {
-    "engine": "google",
-    "code": "oc"
-  },
-  "om": {
-    "engine": "google",
-    "code": "om"
-  },
-  "or": {
-    "engine": "edge",
-    "code": "or"
-  },
-  "os": {
-    "engine": "google",
-    "code": "os"
-  },
-  "otq": {
-    "engine": "edge",
-    "code": "otq"
-  },
-  "pa": {
-    "engine": "edge",
-    "code": "pa"
-  },
-  "pag": {
-    "engine": "google",
-    "code": "pag"
-  },
-  "pam": {
-    "engine": "google",
-    "code": "pam"
-  },
-  "pap": {
-    "engine": "google",
-    "code": "pap"
-  },
-  "pl": {
-    "engine": "edge",
-    "code": "pl"
-  },
-  "prs": {
-    "engine": "edge",
-    "code": "prs"
-  },
-  "ps": {
-    "engine": "edge",
-    "code": "ps"
-  },
-  "qu": {
-    "engine": "google",
-    "code": "qu"
-  },
-  "rn": {
-    "engine": "google",
-    "code": "rn"
-  },
-  "rom": {
-    "engine": "google",
-    "code": "rom"
-  },
-  "rw": {
-    "engine": "edge",
-    "code": "rw"
-  },
-  "sa": {
-    "engine": "google",
-    "code": "sa"
-  },
-  "sah": {
-    "engine": "google",
-    "code": "sah"
-  },
-  "sat": {
-    "engine": "google",
-    "code": "sat"
-  },
-  "scn": {
-    "engine": "google",
-    "code": "scn"
-  },
-  "sd": {
-    "engine": "edge",
-    "code": "sd"
-  },
-  "se": {
-    "engine": "google",
-    "code": "se"
-  },
-  "sg": {
-    "engine": "google",
-    "code": "sg"
-  },
-  "shn": {
-    "engine": "google",
-    "code": "shn"
-  },
-  "si": {
-    "engine": "edge",
-    "code": "si"
-  },
-  "sk": {
-    "engine": "edge",
-    "code": "sk"
-  },
-  "sl": {
-    "engine": "edge",
-    "code": "sl"
-  },
-  "sm": {
-    "engine": "edge",
-    "code": "sm"
-  },
-  "sn": {
-    "engine": "edge",
-    "code": "sn"
-  },
-  "so": {
-    "engine": "edge",
-    "code": "so"
-  },
-  "sq": {
-    "engine": "edge",
-    "code": "sq"
-  },
-  "sr": {
-    "engine": "edge",
-    "code": "sr-Cyrl"
-  },
-  "ss": {
-    "engine": "google",
-    "code": "ss"
-  },
-  "st": {
-    "engine": "edge",
-    "code": "st"
-  },
-  "su": {
-    "engine": "google",
-    "code": "su"
-  },
-  "sus": {
-    "engine": "google",
-    "code": "sus"
-  },
-  "sv": {
-    "engine": "edge",
-    "code": "sv"
-  },
-  "sw": {
-    "engine": "edge",
-    "code": "sw"
-  },
-  "szl": {
-    "engine": "google",
-    "code": "szl"
-  },
-  "ta": {
-    "engine": "edge",
-    "code": "ta"
-  },
-  "tcy": {
-    "engine": "google",
-    "code": "tcy"
-  },
-  "te": {
-    "engine": "edge",
-    "code": "te"
-  },
-  "tet": {
-    "engine": "google",
-    "code": "tet"
-  },
-  "tg": {
-    "engine": "google",
-    "code": "tg"
-  },
-  "ti": {
-    "engine": "edge",
-    "code": "ti"
-  },
-  "tiv": {
-    "engine": "google",
-    "code": "tiv"
-  },
-  "tk": {
-    "engine": "edge",
-    "code": "tk"
-  },
-  "tn": {
-    "engine": "edge",
-    "code": "tn"
-  },
-  "to": {
-    "engine": "edge",
-    "code": "to"
-  },
-  "tpi": {
-    "engine": "google",
-    "code": "tpi"
-  },
-  "tr": {
-    "engine": "edge",
-    "code": "tr"
-  },
-  "trp": {
-    "engine": "google",
-    "code": "trp"
-  },
-  "ts": {
-    "engine": "google",
-    "code": "ts"
-  },
-  "tt": {
-    "engine": "edge",
-    "code": "tt"
-  },
-  "tum": {
-    "engine": "google",
-    "code": "tum"
-  },
-  "tw": {
-    "engine": "google",
-    "code": "tw"
-  },
-  "ty": {
-    "engine": "edge",
-    "code": "ty"
-  },
-  "tyv": {
-    "engine": "google",
-    "code": "tyv"
-  },
-  "udm": {
-    "engine": "google",
-    "code": "udm"
-  },
-  "ug": {
-    "engine": "edge",
-    "code": "ug"
-  },
-  "uk": {
-    "engine": "edge",
-    "code": "uk"
-  },
-  "ur": {
-    "engine": "edge",
-    "code": "ur"
-  },
-  "uz": {
-    "engine": "edge",
-    "code": "uz"
-  },
-  "ve": {
-    "engine": "google",
-    "code": "ve"
-  },
-  "vec": {
-    "engine": "google",
-    "code": "vec"
-  },
-  "vi": {
-    "engine": "edge",
-    "code": "vi"
-  },
-  "war": {
-    "engine": "google",
-    "code": "war"
-  },
-  "wo": {
-    "engine": "google",
-    "code": "wo"
-  },
-  "xh": {
-    "engine": "edge",
-    "code": "xh"
-  },
-  "yi": {
-    "engine": "google",
-    "code": "yi"
-  },
-  "yo": {
-    "engine": "edge",
-    "code": "yo"
-  },
-  "yua": {
-    "engine": "edge",
-    "code": "yua"
-  },
-  "yue": {
-    "engine": "edge",
-    "code": "yue"
-  },
-  "zap": {
-    "engine": "google",
-    "code": "zap"
-  },
-  "zsm": {
-    "engine": "google",
-    "code": "zsm"
-  },
-  "zu": {
-    "engine": "edge",
-    "code": "zu"
-  }
+ "aa": {
+ "engine": "google",
+ "code": "aa"
+ },
+ "ab": {
+ "engine": "google",
+ "code": "ab"
+ },
+ "ace": {
+ "engine": "google",
+ "code": "ace"
+ },
+ "ach": {
+ "engine": "google",
+ "code": "ach"
+ },
+ "af": {
+ "engine": "edge",
+ "code": "af"
+ },
+ "ak": {
+ "engine": "google",
+ "code": "ak"
+ },
+ "alz": {
+ "engine": "google",
+ "code": "alz"
+ },
+ "am": {
+ "engine": "edge",
+ "code": "am"
+ },
+ "as": {
+ "engine": "edge",
+ "code": "as"
+ },
+ "av": {
+ "engine": "google",
+ "code": "av"
+ },
+ "awa": {
+ "engine": "google",
+ "code": "awa"
+ },
+ "ay": {
+ "engine": "google",
+ "code": "ay"
+ },
+ "az": {
+ "engine": "edge",
+ "code": "az"
+ },
+ "ba": {
+ "engine": "edge",
+ "code": "ba"
+ },
+ "bal": {
+ "engine": "google",
+ "code": "bal"
+ },
+ "ban": {
+ "engine": "google",
+ "code": "ban"
+ },
+ "bbc": {
+ "engine": "google",
+ "code": "bbc"
+ },
+ "bci": {
+ "engine": "google",
+ "code": "bci"
+ },
+ "be": {
+ "engine": "edge",
+ "code": "be"
+ },
+ "bem": {
+ "engine": "google",
+ "code": "bem"
+ },
+ "bew": {
+ "engine": "google",
+ "code": "bew"
+ },
+ "bg": {
+ "engine": "edge",
+ "code": "bg"
+ },
+ "bh": {
+ "engine": "google",
+ "code": "bh"
+ },
+ "bho": {
+ "engine": "edge",
+ "code": "bho"
+ },
+ "bik": {
+ "engine": "google",
+ "code": "bik"
+ },
+ "bm": {
+ "engine": "google",
+ "code": "bm"
+ },
+ "bn": {
+ "engine": "edge",
+ "code": "bn"
+ },
+ "bo": {
+ "engine": "edge",
+ "code": "bo"
+ },
+ "br": {
+ "engine": "google",
+ "code": "br"
+ },
+ "brx": {
+ "engine": "edge",
+ "code": "brx"
+ },
+ "bs": {
+ "engine": "edge",
+ "code": "bs"
+ },
+ "bts": {
+ "engine": "google",
+ "code": "bts"
+ },
+ "btx": {
+ "engine": "google",
+ "code": "btx"
+ },
+ "bua": {
+ "engine": "google",
+ "code": "bua"
+ },
+ "bxr": {
+ "engine": "google",
+ "code": "bxr"
+ },
+ "ca": {
+ "engine": "edge",
+ "code": "ca"
+ },
+ "ce": {
+ "engine": "google",
+ "code": "ce"
+ },
+ "ceb": {
+ "engine": "google",
+ "code": "ceb"
+ },
+ "cgg": {
+ "engine": "google",
+ "code": "cgg"
+ },
+ "ch": {
+ "engine": "google",
+ "code": "ch"
+ },
+ "chk": {
+ "engine": "google",
+ "code": "chk"
+ },
+ "chm": {
+ "engine": "google",
+ "code": "chm"
+ },
+ "ckb": {
+ "engine": "google",
+ "code": "ckb"
+ },
+ "cnh": {
+ "engine": "google",
+ "code": "cnh"
+ },
+ "co": {
+ "engine": "google",
+ "code": "co"
+ },
+ "crh": {
+ "engine": "google",
+ "code": "crh"
+ },
+ "crs": {
+ "engine": "google",
+ "code": "crs"
+ },
+ "cs": {
+ "engine": "edge",
+ "code": "cs"
+ },
+ "cv": {
+ "engine": "google",
+ "code": "cv"
+ },
+ "cy": {
+ "engine": "edge",
+ "code": "cy"
+ },
+ "da": {
+ "engine": "edge",
+ "code": "da"
+ },
+ "din": {
+ "engine": "google",
+ "code": "din"
+ },
+ "doi": {
+ "engine": "edge",
+ "code": "doi"
+ },
+ "dov": {
+ "engine": "google",
+ "code": "dov"
+ },
+ "dsb": {
+ "engine": "edge",
+ "code": "dsb"
+ },
+ "dv": {
+ "engine": "edge",
+ "code": "dv"
+ },
+ "dyu": {
+ "engine": "google",
+ "code": "dyu"
+ },
+ "dz": {
+ "engine": "google",
+ "code": "dz"
+ },
+ "ee": {
+ "engine": "google",
+ "code": "ee"
+ },
+ "el": {
+ "engine": "edge",
+ "code": "el"
+ },
+ "eo": {
+ "engine": "google",
+ "code": "eo"
+ },
+ "et": {
+ "engine": "edge",
+ "code": "et"
+ },
+ "eu": {
+ "engine": "edge",
+ "code": "eu"
+ },
+ "fa": {
+ "engine": "edge",
+ "code": "fa"
+ },
+ "ff": {
+ "engine": "google",
+ "code": "ff"
+ },
+ "fi": {
+ "engine": "edge",
+ "code": "fi"
+ },
+ "fj": {
+ "engine": "edge",
+ "code": "fj"
+ },
+ "fo": {
+ "engine": "edge",
+ "code": "fo"
+ },
+ "fon": {
+ "engine": "google",
+ "code": "fon"
+ },
+ "fur": {
+ "engine": "google",
+ "code": "fur"
+ },
+ "fy": {
+ "engine": "google",
+ "code": "fy"
+ },
+ "ga": {
+ "engine": "edge",
+ "code": "ga"
+ },
+ "gaa": {
+ "engine": "google",
+ "code": "gaa"
+ },
+ "gd": {
+ "engine": "google",
+ "code": "gd"
+ },
+ "gl": {
+ "engine": "edge",
+ "code": "gl"
+ },
+ "gn": {
+ "engine": "google",
+ "code": "gn"
+ },
+ "gom": {
+ "engine": "edge",
+ "code": "gom"
+ },
+ "gu": {
+ "engine": "edge",
+ "code": "gu"
+ },
+ "gv": {
+ "engine": "google",
+ "code": "gv"
+ },
+ "ha": {
+ "engine": "edge",
+ "code": "ha"
+ },
+ "haw": {
+ "engine": "google",
+ "code": "haw"
+ },
+ "he": {
+ "engine": "edge",
+ "code": "he"
+ },
+ "hil": {
+ "engine": "google",
+ "code": "hil"
+ },
+ "hmn": {
+ "engine": "google",
+ "code": "hmn"
+ },
+ "hne": {
+ "engine": "edge",
+ "code": "hne"
+ },
+ "hr": {
+ "engine": "edge",
+ "code": "hr"
+ },
+ "hrx": {
+ "engine": "google",
+ "code": "hrx"
+ },
+ "hsb": {
+ "engine": "edge",
+ "code": "hsb"
+ },
+ "ht": {
+ "engine": "edge",
+ "code": "ht"
+ },
+ "hu": {
+ "engine": "edge",
+ "code": "hu"
+ },
+ "hy": {
+ "engine": "edge",
+ "code": "hy"
+ },
+ "iba": {
+ "engine": "google",
+ "code": "iba"
+ },
+ "ig": {
+ "engine": "edge",
+ "code": "ig"
+ },
+ "ikt": {
+ "engine": "edge",
+ "code": "ikt"
+ },
+ "ilo": {
+ "engine": "google",
+ "code": "ilo"
+ },
+ "is": {
+ "engine": "edge",
+ "code": "is"
+ },
+ "it": {
+ "engine": "edge",
+ "code": "it"
+ },
+ "iu": {
+ "engine": "edge",
+ "code": "iu"
+ },
+ "jam": {
+ "engine": "google",
+ "code": "jam"
+ },
+ "jv": {
+ "engine": "google",
+ "code": "jv"
+ },
+ "ka": {
+ "engine": "edge",
+ "code": "ka"
+ },
+ "kac": {
+ "engine": "google",
+ "code": "kac"
+ },
+ "kek": {
+ "engine": "google",
+ "code": "kek"
+ },
+ "kg": {
+ "engine": "google",
+ "code": "kg"
+ },
+ "kha": {
+ "engine": "google",
+ "code": "kha"
+ },
+ "kk": {
+ "engine": "edge",
+ "code": "kk"
+ },
+ "kl": {
+ "engine": "google",
+ "code": "kl"
+ },
+ "km": {
+ "engine": "edge",
+ "code": "km"
+ },
+ "kmr": {
+ "engine": "edge",
+ "code": "kmr"
+ },
+ "kn": {
+ "engine": "edge",
+ "code": "kn"
+ },
+ "kr": {
+ "engine": "google",
+ "code": "kr"
+ },
+ "kri": {
+ "engine": "google",
+ "code": "kri"
+ },
+ "ks": {
+ "engine": "edge",
+ "code": "ks"
+ },
+ "ktu": {
+ "engine": "google",
+ "code": "ktu"
+ },
+ "ku": {
+ "engine": "edge",
+ "code": "ku"
+ },
+ "kv": {
+ "engine": "google",
+ "code": "kv"
+ },
+ "ky": {
+ "engine": "edge",
+ "code": "ky"
+ },
+ "la": {
+ "engine": "google",
+ "code": "la"
+ },
+ "lb": {
+ "engine": "edge",
+ "code": "lb"
+ },
+ "lg": {
+ "engine": "edge",
+ "code": "lug"
+ },
+ "li": {
+ "engine": "google",
+ "code": "li"
+ },
+ "lij": {
+ "engine": "google",
+ "code": "lij"
+ },
+ "lmo": {
+ "engine": "google",
+ "code": "lmo"
+ },
+ "ln": {
+ "engine": "edge",
+ "code": "ln"
+ },
+ "lo": {
+ "engine": "edge",
+ "code": "lo"
+ },
+ "lt": {
+ "engine": "edge",
+ "code": "lt"
+ },
+ "ltg": {
+ "engine": "google",
+ "code": "ltg"
+ },
+ "lua": {
+ "engine": "google",
+ "code": "lua"
+ },
+ "luo": {
+ "engine": "google",
+ "code": "luo"
+ },
+ "lus": {
+ "engine": "google",
+ "code": "lus"
+ },
+ "lv": {
+ "engine": "edge",
+ "code": "lv"
+ },
+ "mad": {
+ "engine": "google",
+ "code": "mad"
+ },
+ "mai": {
+ "engine": "edge",
+ "code": "mai"
+ },
+ "mak": {
+ "engine": "google",
+ "code": "mak"
+ },
+ "mam": {
+ "engine": "google",
+ "code": "mam"
+ },
+ "mfe": {
+ "engine": "google",
+ "code": "mfe"
+ },
+ "mg": {
+ "engine": "edge",
+ "code": "mg"
+ },
+ "mh": {
+ "engine": "google",
+ "code": "mh"
+ },
+ "mi": {
+ "engine": "edge",
+ "code": "mi"
+ },
+ "min": {
+ "engine": "google",
+ "code": "min"
+ },
+ "mk": {
+ "engine": "edge",
+ "code": "mk"
+ },
+ "ml": {
+ "engine": "edge",
+ "code": "ml"
+ },
+ "mn": {
+ "engine": "edge",
+ "code": "mn-Cyrl"
+ },
+ "mni": {
+ "engine": "edge",
+ "code": "mni"
+ },
+ "mr": {
+ "engine": "edge",
+ "code": "mr"
+ },
+ "mt": {
+ "engine": "edge",
+ "code": "mt"
+ },
+ "mwr": {
+ "engine": "google",
+ "code": "mwr"
+ },
+ "mww": {
+ "engine": "edge",
+ "code": "mww"
+ },
+ "my": {
+ "engine": "edge",
+ "code": "my"
+ },
+ "nb": {
+ "engine": "edge",
+ "code": "nb"
+ },
+ "ne": {
+ "engine": "edge",
+ "code": "ne"
+ },
+ "new": {
+ "engine": "google",
+ "code": "new"
+ },
+ "nhe": {
+ "engine": "google",
+ "code": "nhe"
+ },
+ "nl": {
+ "engine": "edge",
+ "code": "nl"
+ },
+ "no": {
+ "engine": "edge",
+ "code": "nb"
+ },
+ "nr": {
+ "engine": "google",
+ "code": "nr"
+ },
+ "nso": {
+ "engine": "edge",
+ "code": "nso"
+ },
+ "nus": {
+ "engine": "google",
+ "code": "nus"
+ },
+ "ny": {
+ "engine": "edge",
+ "code": "nya"
+ },
+ "oc": {
+ "engine": "google",
+ "code": "oc"
+ },
+ "om": {
+ "engine": "google",
+ "code": "om"
+ },
+ "or": {
+ "engine": "edge",
+ "code": "or"
+ },
+ "os": {
+ "engine": "google",
+ "code": "os"
+ },
+ "otq": {
+ "engine": "edge",
+ "code": "otq"
+ },
+ "pa": {
+ "engine": "edge",
+ "code": "pa"
+ },
+ "pag": {
+ "engine": "google",
+ "code": "pag"
+ },
+ "pam": {
+ "engine": "google",
+ "code": "pam"
+ },
+ "pap": {
+ "engine": "google",
+ "code": "pap"
+ },
+ "pl": {
+ "engine": "edge",
+ "code": "pl"
+ },
+ "prs": {
+ "engine": "edge",
+ "code": "prs"
+ },
+ "ps": {
+ "engine": "edge",
+ "code": "ps"
+ },
+ "qu": {
+ "engine": "google",
+ "code": "qu"
+ },
+ "rn": {
+ "engine": "google",
+ "code": "rn"
+ },
+ "rom": {
+ "engine": "google",
+ "code": "rom"
+ },
+ "rw": {
+ "engine": "edge",
+ "code": "rw"
+ },
+ "sa": {
+ "engine": "google",
+ "code": "sa"
+ },
+ "sah": {
+ "engine": "google",
+ "code": "sah"
+ },
+ "sat": {
+ "engine": "google",
+ "code": "sat"
+ },
+ "scn": {
+ "engine": "google",
+ "code": "scn"
+ },
+ "sd": {
+ "engine": "edge",
+ "code": "sd"
+ },
+ "se": {
+ "engine": "google",
+ "code": "se"
+ },
+ "sg": {
+ "engine": "google",
+ "code": "sg"
+ },
+ "shn": {
+ "engine": "google",
+ "code": "shn"
+ },
+ "si": {
+ "engine": "edge",
+ "code": "si"
+ },
+ "sk": {
+ "engine": "edge",
+ "code": "sk"
+ },
+ "sl": {
+ "engine": "edge",
+ "code": "sl"
+ },
+ "sm": {
+ "engine": "edge",
+ "code": "sm"
+ },
+ "sn": {
+ "engine": "edge",
+ "code": "sn"
+ },
+ "so": {
+ "engine": "edge",
+ "code": "so"
+ },
+ "sq": {
+ "engine": "edge",
+ "code": "sq"
+ },
+ "sr": {
+ "engine": "edge",
+ "code": "sr-Cyrl"
+ },
+ "ss": {
+ "engine": "google",
+ "code": "ss"
+ },
+ "st": {
+ "engine": "edge",
+ "code": "st"
+ },
+ "su": {
+ "engine": "google",
+ "code": "su"
+ },
+ "sus": {
+ "engine": "google",
+ "code": "sus"
+ },
+ "sv": {
+ "engine": "edge",
+ "code": "sv"
+ },
+ "sw": {
+ "engine": "edge",
+ "code": "sw"
+ },
+ "szl": {
+ "engine": "google",
+ "code": "szl"
+ },
+ "ta": {
+ "engine": "edge",
+ "code": "ta"
+ },
+ "tcy": {
+ "engine": "google",
+ "code": "tcy"
+ },
+ "te": {
+ "engine": "edge",
+ "code": "te"
+ },
+ "tet": {
+ "engine": "google",
+ "code": "tet"
+ },
+ "tg": {
+ "engine": "google",
+ "code": "tg"
+ },
+ "ti": {
+ "engine": "edge",
+ "code": "ti"
+ },
+ "tiv": {
+ "engine": "google",
+ "code": "tiv"
+ },
+ "tk": {
+ "engine": "edge",
+ "code": "tk"
+ },
+ "tn": {
+ "engine": "edge",
+ "code": "tn"
+ },
+ "to": {
+ "engine": "edge",
+ "code": "to"
+ },
+ "tpi": {
+ "engine": "google",
+ "code": "tpi"
+ },
+ "tr": {
+ "engine": "edge",
+ "code": "tr"
+ },
+ "trp": {
+ "engine": "google",
+ "code": "trp"
+ },
+ "ts": {
+ "engine": "google",
+ "code": "ts"
+ },
+ "tt": {
+ "engine": "edge",
+ "code": "tt"
+ },
+ "tum": {
+ "engine": "google",
+ "code": "tum"
+ },
+ "tw": {
+ "engine": "google",
+ "code": "tw"
+ },
+ "ty": {
+ "engine": "edge",
+ "code": "ty"
+ },
+ "tyv": {
+ "engine": "google",
+ "code": "tyv"
+ },
+ "udm": {
+ "engine": "google",
+ "code": "udm"
+ },
+ "ug": {
+ "engine": "edge",
+ "code": "ug"
+ },
+ "uk": {
+ "engine": "edge",
+ "code": "uk"
+ },
+ "ur": {
+ "engine": "edge",
+ "code": "ur"
+ },
+ "uz": {
+ "engine": "edge",
+ "code": "uz"
+ },
+ "ve": {
+ "engine": "google",
+ "code": "ve"
+ },
+ "vec": {
+ "engine": "google",
+ "code": "vec"
+ },
+ "vi": {
+ "engine": "edge",
+ "code": "vi"
+ },
+ "war": {
+ "engine": "google",
+ "code": "war"
+ },
+ "wo": {
+ "engine": "google",
+ "code": "wo"
+ },
+ "xh": {
+ "engine": "edge",
+ "code": "xh"
+ },
+ "yi": {
+ "engine": "google",
+ "code": "yi"
+ },
+ "yo": {
+ "engine": "edge",
+ "code": "yo"
+ },
+ "yua": {
+ "engine": "edge",
+ "code": "yua"
+ },
+ "yue": {
+ "engine": "edge",
+ "code": "yue"
+ },
+ "zap": {
+ "engine": "google",
+ "code": "zap"
+ },
+ "zsm": {
+ "engine": "google",
+ "code": "zsm"
+ },
+ "zu": {
+ "engine": "edge",
+ "code": "zu"
+ }
 }

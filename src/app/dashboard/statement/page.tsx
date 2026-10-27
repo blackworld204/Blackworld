@@ -7,7 +7,8 @@ import { CurrencyFlag } from "@/components/currency-flag";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
 import { downloadCsv } from "@/lib/csv";
-import { localeTag, money, privacyOf, when } from "@/lib/bank";
+import { currencyLabel, localeTag, money, privacyOf, when } from "@/lib/bank";
+import { listedCurrencies } from "@/lib/currencies";
 
 function dayKey(value: string | Date) {
   const date = typeof value === "string" ? new Date(value) : value;
@@ -89,12 +90,12 @@ export default function StatementPage() {
       {period ? <p className="statement-period">{period}</p> : null}
       {invalid ? <p className="form-error">{t("The start date is after the end date.")}</p> : null}
       <dl className="sheet">
-        {(["USD", "EUR", "GBP"] as const).map((code) => (
-          <div key={code}>
+        {listedCurrencies(user.balances).map((item) => (
+          <div key={item.code}>
             <dt className="ccy-code">
-              <CurrencyFlag code={code} /> {code}
+              <CurrencyFlag code={item.code} /> {currencyLabel(item.code)}
             </dt>
-            <dd>{money(user.balances[code], code, locale)}</dd>
+            <dd>{money(user.balances[item.code], item.code, locale)}</dd>
           </div>
         ))}
       </dl>

@@ -1,4 +1,7 @@
-import { CURRENCIES, balancesOf, emptyBalances, isMoneyCode, type MoneyCode } from "@/lib/currencies";
+import { CURRENCIES, balancesOf, currencyLabel, emptyBalances, isMoneyCode, moneyDigits, type MoneyCode } from "@/lib/currencies";
+
+export { currencyLabel };
+import { parseAmount } from "@/lib/money-input";
 import { isSealed } from "@/lib/sealed";
 import { dispatchHooks } from "@/lib/dispatch-hooks";
 import { currentRevision, openRemote, sealRemote, stateNeedsOpen } from "@/lib/vault-client";
@@ -56,6 +59,12 @@ export type BankUser = {
   /** Address waiting on the email-change link. Sign-in claims it once Firebase accepts it. */
   pendingEmail?: string;
 };
+
+export function hasTransferPin(user: Pick<BankUser, "pin"> | null | undefined) {
+  if (!user?.pin) return false;
+  if (isSealed(user.pin)) return true;
+  return /^\d{4}$/.test(user.pin);
+}
 
 export type BankAddress = {
   street: string;
@@ -326,6 +335,33 @@ export function hydrateBank() {
   return Promise.resolve(loadBank());
 }
 
+async function sealDesk(clean: BankState, serial: number, fresh: string[]) {
+  let saved = await sealRemote(clean);
+  if (serial !== commitSerial) return "stale" as const;
+  if (!saved) saved = await sealRemote(clean);
+  if (serial !== commitSerial) return "stale" as const;
+  if (!saved) {
+    try {
+      await persistBank?.(clean);
+    } catch {
+      /* This tab still has the desk. The next change tries the save again. */
+    }
+    return "offline" as const;
+  }
+  if (saved.kind === "conflict") {
+    await replaceBank(saved.state);
+    return "conflict" as const;
+  }
+  if (saved.revision < (currentRevision() ?? saved.revision)) return "stale" as const;
+  try {
+    await persistBank?.(saved.state);
+  } catch {
+    /* This tab still has the desk. The next change tries the save again. */
+  }
+  if (fresh.length) void dispatchHooks(fresh);
+  return "saved" as const;
+}
+
 export function saveBank(next: BankState) {
   const prior = memory;
   const clean = normalizeBank(next);
@@ -336,31 +372,24 @@ export function saveBank(next: BankState) {
   window.dispatchEvent(new Event(EVENT));
   if (applyingRemote || stateNeedsOpen(clean)) return;
   const serial = ++commitSerial;
-  void sealRemote(clean).then(async (sealed) => {
-    if (serial !== commitSerial) return;
-    let saved = sealed ?? (await sealRemote(clean));
-    if (serial !== commitSerial) return;
-    if (!saved) {
-      try {
-        await persistBank?.(clean);
-      } catch {
-        /* This tab still has the desk. The next change tries the save again. */
-      }
-      return;
-    }
-    const sealedResult = saved;
-    if (sealedResult.kind === "conflict") {
-      void replaceBank(sealedResult.state);
-      return;
-    }
-    if (sealedResult.revision < (currentRevision() ?? sealedResult.revision)) return;
-    try {
-      await persistBank?.(sealedResult.state);
-    } catch {
-      /* This tab still has the desk. The next change tries the save again. */
-    }
-    if (fresh.length) void dispatchHooks(fresh);
-  });
+  void sealDesk(clean, serial, fresh);
+}
+
+/** Same as saveBank, but waits for the shared desk write and reports a failure. */
+export async function saveBankSynced(next: BankState): Promise<string | null> {
+  const prior = memory;
+  const clean = normalizeBank(next);
+  const fresh = prior
+    ? clean.events.filter((event) => !prior.events.some((item) => item.id === event.id)).map((event) => event.id)
+    : [];
+  memory = clean;
+  window.dispatchEvent(new Event(EVENT));
+  if (applyingRemote || stateNeedsOpen(clean)) return null;
+  const serial = ++commitSerial;
+  const result = await sealDesk(clean, serial, fresh);
+  if (result === "offline") return "The desk could not be reached.";
+  if (result === "conflict") return "The desk changed. Try again.";
+  return null;
 }
 
 function withHeld(state: BankState) {
@@ -480,7 +509,7 @@ export function localeTag(locale: string) {
 }
 
 export function money(amount: number, code: MoneyCode, locale = "en") {
-  const digits = code === "JPY" ? 0 : 2;
+  const digits = moneyDigits(code);
   return new Intl.NumberFormat(localeTag(locale), {
     style: "currency",
     currency: code,
@@ -701,7 +730,7 @@ export function adjustBalance(actorId: string, userId: string, code: MoneyCode, 
   if (!actingAdmin(state, actorId)) return "Only an admin can change a balance.";
   const user = state.users.find((item) => item.id === userId);
   if (!user) return "Account not found.";
-  const digits = code === "JPY" ? 0 : 2;
+  const digits = moneyDigits(code);
   const factor = 10 ** digits;
   const next = Math.round(Math.max(0, nextAmount) * factor) / factor;
   const current = Math.round(user.balances[code] * factor) / factor;
@@ -1115,7 +1144,7 @@ export function removeMember(actorId: string, memberId: string) {
 export function cardSpendAmount(raw: string): { error: string } | { amount: number | null } {
   const trimmed = raw.trim();
   if (!trimmed) return { amount: null };
-  const value = Number(trimmed);
+  const value = parseAmount(trimmed);
   if (!Number.isFinite(value) || value <= 0) return { error: "Enter a spend limit, or leave it blank." };
   return { amount: Math.round(value * 100) / 100 };
 }
@@ -1129,7 +1158,7 @@ export function cardDraftError(input: { holder: string; last4: string; expiry: s
   return null;
 }
 
-export function addCard(input: Omit<BankCard, "id">) {
+export async function addCard(input: Omit<BankCard, "id">) {
   const state = loadBank();
   const card: BankCard = { ...input, id: id("card") };
   const cards = input.primary
@@ -1137,10 +1166,10 @@ export function addCard(input: Omit<BankCard, "id">) {
         item.userId === input.userId ? { ...item, primary: false } : item,
       )
     : state.cards;
-  saveBank({ ...state, cards: [card, ...cards] });
+  return saveBankSynced({ ...state, cards: [card, ...cards] });
 }
 
-export function updateCard(
+export async function updateCard(
   userId: string,
   cardId: string,
   patch: {
@@ -1170,20 +1199,19 @@ export function updateCard(
       spendLimit: patch.spendLimit === null ? undefined : patch.spendLimit,
     };
   });
-  saveBank({ ...state, cards });
-  return null;
+  return saveBankSynced({ ...state, cards });
 }
 
-export function removeCard(userId: string, cardId: string) {
+export async function removeCard(userId: string, cardId: string) {
   const state = loadBank();
   const card = state.cards.find((item) => item.id === cardId && item.userId === userId);
-  if (!card) return;
+  if (!card) return null;
   let cards = state.cards.filter((item) => item.id !== cardId);
   if (card?.primary) {
     const next = cards.find((item) => item.userId === card.userId);
     if (next) cards = cards.map((item) => (item.id === next.id ? { ...item, primary: true } : item));
   }
-  saveBank({ ...state, cards });
+  return saveBankSynced({ ...state, cards });
 }
 
 export function notesFor(state: BankState, userId: string) {
@@ -1267,10 +1295,10 @@ export function postAdminNotice(
   };
 }
 
-export function setCardFrozen(userId: string, cardId: string, frozen: boolean) {
+export async function setCardFrozen(userId: string, cardId: string, frozen: boolean) {
   const state = loadBank();
-  if (!state.cards.some((card) => card.id === cardId && card.userId === userId)) return;
-  saveBank({
+  if (!state.cards.some((card) => card.id === cardId && card.userId === userId)) return "Card not found.";
+  return saveBankSynced({
     ...state,
     cards: state.cards.map((card) => (card.id === cardId ? { ...card, frozen } : card)),
   });

@@ -10,9 +10,10 @@ import { CurrencySelect } from "@/components/currency-select";
 import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
-import { MONEY, addPayee, money, removePayee, type MoneyCode } from "@/lib/bank";
+import { MONEY, addPayee, currencyLabel, money, removePayee, type MoneyCode } from "@/lib/bank";
 import { postAccount } from "@/lib/flow-api";
 import { countryOfBank, swiftOfBank } from "@/lib/banks";
+import { formatAmountInput, parseAmount } from "@/lib/money-input";
 
 type Draft = {
   holder: string;
@@ -57,7 +58,7 @@ export default function SendPage() {
   const payees = state.payees.filter((payee) => payee.userId === user.id);
   const savedAlready = payees.some((payee) => payee.holder === draft.holder && payee.account === draft.account);
 
-  const amount = Number(draft.amount);
+  const amount = parseAmount(draft.amount);
   const fee = Number.isFinite(amount) ? Math.round(amount * 0.01 * 100) / 100 : 0;
   const total = Number.isFinite(amount) ? amount + fee : 0;
 
@@ -104,22 +105,25 @@ export default function SendPage() {
       note: draft.note.trim(),
       amount,
       currency: draft.currency,
+      ref: `pay_${Math.random().toString(36).slice(2, 12)}${Date.now().toString(36)}`.slice(0, 40),
     };
-    void postAccount<{ status?: string }>("payments", payment).then((result) => {
-      if (result.error) {
-        setBusy(false);
-        setError(t(result.error));
-        return;
-      }
-      if (result.body?.status === "pending") {
-        toast(t("Waiting for an admin to approve."));
-        setHeld(true);
-      } else {
-        toast(t("Transfer sent."));
-        setRef(`BW-${Math.floor(100000 + Math.random() * 900000)}`);
-      }
-      setStep(2);
-    });
+    void postAccount<{ status?: string }>("payments", payment)
+      .then((result) => {
+        if (result.error) {
+          setError(t(result.error));
+          return;
+        }
+        if (result.body?.status === "pending") {
+          toast(t("Waiting for an admin to approve."));
+          setHeld(true);
+        } else {
+          toast(t("Transfer sent."));
+          setRef(`BW-${Math.floor(100000 + Math.random() * 900000)}`);
+        }
+        setStep(2);
+      })
+      .catch(() => setError(t("The desk could not be reached.")))
+      .finally(() => setBusy(false));
   }
 
   if (step === 2) {
@@ -266,7 +270,7 @@ export default function SendPage() {
           <div className="split">
             <label className="field">
               <span>{t("Amount")}</span>
-              <input inputMode="decimal" value={draft.amount} onChange={(event) => set("amount", event.target.value)} />
+              <input inputMode="decimal" value={draft.amount} onChange={(event) => set("amount", formatAmountInput(event.target.value))} />
             </label>
             <label className="field">
               <span>{t("Currency")}</span>
@@ -276,7 +280,7 @@ export default function SendPage() {
                 options={MONEY.map((item) => ({
                   code: item.code,
                   label: t("{code} · available {amount}", {
-                    code: item.code,
+                    code: currencyLabel(item.code),
                     amount: money(user.balances[item.code], item.code, locale),
                   }),
                 }))}

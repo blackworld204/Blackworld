@@ -6,7 +6,7 @@ import { catalog } from "@/i18n/messages";
 import { writtenLocale } from "@/i18n/written";
 
 const KEY = "blackworld-locale";
-const PACK = "blackworld-tr-v2:";
+const PACK = "blackworld-tr-v3:";
 
 type I18nValue = {
   locale: LocaleId;
@@ -70,8 +70,15 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       })
       .then((data) => {
         if (controller.signal.aborted) return;
+        const entries = data && typeof data === "object" ? Object.keys(data).length : 0;
+        if (!bundled && entries === 0) {
+          setPack(null);
+          setTranslating(false);
+          setLanguageFailed(true);
+          return;
+        }
         try {
-          localStorage.setItem(storageKey, JSON.stringify(data));
+          if (entries > 0) localStorage.setItem(storageKey, JSON.stringify(data));
         } catch {
           /* The table is optional. The page still uses the response. */
         }

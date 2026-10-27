@@ -1,4 +1,5 @@
 import * as yup from "yup";
+import { parseAmount } from "@/lib/money-input";
 import { isStrongPassword, passwordRequiredMessage, strongPasswordMessage } from "@/lib/password-strength";
 
 const name = "Enter a first and last name.";
@@ -58,7 +59,7 @@ export const personalSchema = yup.object({
     .string()
     .required(balanceMessage)
     .test("balance", balanceMessage, (value) => {
-      const amount = Number(value);
+      const amount = parseAmount(value ?? "");
       return Number.isFinite(amount) && amount >= 0;
     }),
 });

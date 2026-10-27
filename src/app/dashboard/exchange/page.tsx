@@ -9,8 +9,9 @@ import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
 import { useLiveRates } from "@/components/use-live-rates";
 import { useI18n } from "@/i18n/provider";
-import { MONEY, localeTag, money, type MoneyCode } from "@/lib/bank";
+import { MONEY, currencyLabel, localeTag, money, type MoneyCode } from "@/lib/bank";
 import { postAccount } from "@/lib/flow-api";
+import { formatAmountInput, parseAmount } from "@/lib/money-input";
 import { formatQuoteTime, quoteConversion } from "@/lib/rates";
 
 export default function ExchangePage() {
@@ -19,7 +20,7 @@ export default function ExchangePage() {
   const { rates, date, asOf, status } = useLiveRates();
   const [from, setFrom] = useState<MoneyCode>("USD");
   const [to, setTo] = useState<MoneyCode>("EUR");
-  const [amount, setAmount] = useState("1000");
+  const [amount, setAmount] = useState("1,000");
   const [review, setReview] = useState(false);
   const [done, setDone] = useState("");
   const [error, setError] = useState("");
@@ -27,7 +28,7 @@ export default function ExchangePage() {
   const [busy, setBusy] = useState(false);
   const [ask, setAsk] = useState(false);
 
-  const value = Number(amount);
+  const value = parseAmount(amount);
   const quote = useMemo(() => {
     if (!Number.isFinite(value) || value <= 0 || from === to) return null;
     const source = rates.find((rate) => rate.code === from);
@@ -123,7 +124,10 @@ export default function ExchangePage() {
               <CurrencySelect
                 label={t("From")}
                 value={from}
-                options={MONEY.map((item) => ({ code: item.code, label: item.code }))}
+                options={MONEY.map((item) => ({
+                  code: item.code,
+                  label: currencyLabel(item.code),
+                }))}
                 onChange={(next) => {
                   const code = next as MoneyCode;
                   setFrom(code);
@@ -138,7 +142,7 @@ export default function ExchangePage() {
                 value={to}
                 options={MONEY.filter((item) => item.code !== from).map((item) => ({
                   code: item.code,
-                  label: item.code,
+                  label: currencyLabel(item.code),
                 }))}
                 onChange={(next) => setTo(next as MoneyCode)}
               />
@@ -146,18 +150,18 @@ export default function ExchangePage() {
           </div>
           <label className="field">
             <span>{t("Amount")}</span>
-            <input inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} />
+            <input inputMode="decimal" value={amount} onChange={(event) => setAmount(formatAmountInput(event.target.value))} />
           </label>
           {status !== "loading" && quote ? (
             <p className="muted rate-line rate-tick" key={asOf ?? "quote"}>
               <span>{t("Rate")} 1</span>
               <CurrencyFlag code={from} />
               <span>
-                {from} = {quote.rate.toFixed(4)}
+                {currencyLabel(from)} = {quote.rate.toFixed(4)}
               </span>
               <CurrencyFlag code={to} />
               <span>
-                {to} · {t("fee {fee} · you receive {received}", {
+                {currencyLabel(to)} · {t("fee {fee} · you receive {received}", {
                   fee: money(quote.fee, from, locale),
                   received: money(quote.received, to, locale),
                 })}

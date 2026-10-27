@@ -11,11 +11,12 @@ import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
 import { depositBreakdown, money } from "@/lib/bank";
 import { postAccount } from "@/lib/flow-api";
+import { formatAmountInput, parseAmount } from "@/lib/money-input";
 
 export default function DepositPage() {
   const { state, user } = useAccount();
   const { t, locale } = useI18n();
-  const [amount, setAmount] = useState("1000");
+  const [amount, setAmount] = useState("1,000");
   const [method, setMethod] = useState<"wire" | "card">("wire");
   const [done, setDone] = useState<number | null>(null);
   const [error, setError] = useState("");
@@ -26,7 +27,7 @@ export default function DepositPage() {
   const cards = state.cards.filter((card) => card.userId === user.id);
   const chargeable = cards.filter((card) => !card.frozen);
   const card = chargeable.find((item) => item.primary) ?? chargeable[0];
-  const value = Number(amount);
+  const value = parseAmount(amount);
   const breakdown = Number.isFinite(value) && value > 0 ? depositBreakdown(value) : null;
   const fee = breakdown?.fee ?? 0;
   const credit = breakdown?.credit ?? 0;
@@ -122,7 +123,7 @@ export default function DepositPage() {
         )}
         <label className="field">
           <span>{t("Amount (USD)")}</span>
-          <input inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} />
+          <input inputMode="decimal" value={amount} onChange={(event) => setAmount(formatAmountInput(event.target.value))} />
         </label>
         <p className="muted ccy-code">
           <CurrencyFlag code="USD" />

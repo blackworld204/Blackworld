@@ -54,21 +54,32 @@ export type SealResult =
   | { kind: "conflict"; state: BankState; revision: number };
 
 export async function sealRemote(state: BankState): Promise<SealResult | null> {
-  const headers = await authHeaders();
-  if (!headers) return null;
   const known = currentRevision();
-  const response = await fetch("/api/vault", {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ op: "seal", state, revision: known ?? undefined }),
-  }).catch(() => null);
-  if (!response) return null;
-  const data = (await response.json().catch(() => null)) as { state?: BankState; revision?: number } | null;
-  if (!data?.state || typeof data.revision !== "number") return null;
-  rememberRevision(data.revision);
-  if (response.status === 409) return { kind: "conflict", state: data.state, revision: data.revision };
-  if (!response.ok) return null;
-  return { kind: "saved", state: data.state, revision: data.revision };
+  const body = JSON.stringify({ op: "seal", state, revision: known ?? undefined });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const token = await firebaseBearer(attempt > 0).catch(() => null);
+    if (token == null) return null;
+    const response = await fetch("/api/vault", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body,
+    }).catch(() => null);
+    if (!response) {
+      if (attempt === 0) continue;
+      return null;
+    }
+    const data = (await response.json().catch(() => null)) as { state?: BankState; revision?: number } | null;
+    if (response.status === 503) {
+      if (attempt === 0) continue;
+      return null;
+    }
+    if (!data?.state || typeof data.revision !== "number") return null;
+    rememberRevision(data.revision);
+    if (response.status === 409) return { kind: "conflict", state: data.state, revision: data.revision };
+    if (!response.ok) return null;
+    return { kind: "saved", state: data.state, revision: data.revision };
+  }
+  return null;
 }
 
 export async function openRemote(state: BankState, bearer?: string) {

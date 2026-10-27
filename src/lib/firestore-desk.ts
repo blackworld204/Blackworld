@@ -148,16 +148,22 @@ export async function writeFirestoreDesk(token: string, desk: DeskRecord) {
   const payload = JSON.stringify({
     writes: [{ update: { name: docName("desks", "presentation"), fields: (toValue(body) as { mapValue: { fields: unknown } }).mapValue.fields } }],
   });
-  let last = 0;
-  for (const bearer of await bearers(token)) {
-    const response = await authed(`projects/${projectId()}/databases/(default)/documents:commit`, bearer, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: payload,
-    }).catch(() => null);
-    if (response?.ok) return;
-    last = response?.status ?? 0;
-    if (last !== 401 && last !== 403) break;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    let retry = false;
+    for (const bearer of await bearers(token)) {
+      const response = await authed(`projects/${projectId()}/databases/(default)/documents:commit`, bearer, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+      }).catch(() => null);
+      if (response?.ok) return;
+      const status = response?.status ?? 0;
+      if (status === 401 || status === 403) continue;
+      retry = status === 0 || status >= 500;
+      break;
+    }
+    if (!retry || attempt === 1) break;
+    await new Promise((resolve) => setTimeout(resolve, 250));
   }
   throw new Error("firestore");
 }

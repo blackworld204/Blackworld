@@ -1,21 +1,34 @@
+import { CURRENCIES, FRANKFURTER_CODES } from "@/lib/currencies";
 import { SANDBOX_RATES, loadLiveRates, type RateBook } from "@/lib/rates";
 
-const QUOTES: { symbol: string; code: string; invert: boolean }[] = [
-  { symbol: "EURUSD=X", code: "EUR", invert: true },
-  { symbol: "GBPUSD=X", code: "GBP", invert: true },
-  { symbol: "USDJPY=X", code: "JPY", invert: false },
-  { symbol: "USDCHF=X", code: "CHF", invert: false },
-  { symbol: "USDCAD=X", code: "CAD", invert: false },
-  { symbol: "USDCNY=X", code: "CNY", invert: false },
-  { symbol: "AUDUSD=X", code: "AUD", invert: true },
-  { symbol: "USDSGD=X", code: "SGD", invert: false },
-  { symbol: "USDNGN=X", code: "NGN", invert: false },
-  { symbol: "USDINR=X", code: "INR", invert: false },
-  { symbol: "USDZAR=X", code: "ZAR", invert: false },
-  { symbol: "USDAED=X", code: "AED", invert: false },
-  { symbol: "USDBRL=X", code: "BRL", invert: false },
-  { symbol: "USDMXN=X", code: "MXN", invert: false },
-];
+/** Yahoo typically quotes these as XXXUSD (USD per unit); others as USDXXX (units per USD). */
+const INVERT = new Set(["EUR", "GBP", "AUD", "NZD"]);
+
+/** Liquid pairs we refresh live; every ISO currency still appears via sandbox/Frankfurter fallbacks. */
+const LIVE = new Set<string>([
+  ...FRANKFURTER_CODES,
+  "NGN",
+  "AED",
+  "ARS",
+  "COP",
+  "EGP",
+  "GHS",
+  "KES",
+  "MAD",
+  "PKR",
+  "QAR",
+  "RUB",
+  "SAR",
+  "TWD",
+  "UAH",
+  "VND",
+]);
+
+const QUOTES = CURRENCIES.filter((item) => item.code !== "USD" && LIVE.has(item.code)).map((item) => ({
+  symbol: INVERT.has(item.code) ? `${item.code}USD=X` : `USD${item.code}=X`,
+  code: item.code,
+  invert: INVERT.has(item.code),
+}));
 
 type Listener = (book: RateBook) => void;
 

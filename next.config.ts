@@ -3,6 +3,10 @@ import path from "node:path";
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(process.cwd()),
+  outputFileTracingIncludes: {
+    "/api/i18n/[locale]": ["./src/i18n/cache/**/*", "./data/i18n-cache/**/*"],
+    "/api/i18n/extra/[locale]": ["./src/i18n/cache/**/*", "./data/i18n-cache/**/*"],
+  },
   allowedDevOrigins: ["127.0.0.1", "localhost"],
   devIndicators: false,
   async redirects() {

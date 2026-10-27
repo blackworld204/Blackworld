@@ -6,12 +6,15 @@ import { createPortal } from "react-dom";
 import { AccountPhoto } from "@/components/account-photo";
 import { AdminAccount } from "@/components/admin-account";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { CurrencySelect } from "@/components/currency-select";
 import { NoticeDialog } from "@/components/notice-dialog";
 import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
 import { MONEY, adjustBalance, forgetPushTokens, money, postAdminNotice, removeMember, setAccountRole, setAccountStatus, setCreateAccess, type BankUser, type MoneyCode } from "@/lib/bank";
+import { currencyLabel, listedCurrencies, moneyDigits } from "@/lib/currencies";
 import { deliverPush } from "@/lib/deliver-push";
+import { formatAmountInput, parseAmount } from "@/lib/money-input";
 
 function tone(name: string) {
   const tones = ["#17382c", "#2f6a52", "#6b5a1e", "#3e4d44", "#7a2824"];
@@ -20,7 +23,7 @@ function tone(name: string) {
 }
 
 function visibleBalances(user: BankUser) {
-  return MONEY.filter((item) => item.code === "USD" || item.code === "EUR" || user.balances[item.code] > 0);
+  return listedCurrencies(user.balances);
 }
 
 function Mark({ name }: { name: "balance" | "block" | "allow" | "remove" | "shield" | "users" | "active" | "bell" }) {
@@ -165,7 +168,7 @@ export default function AdminPage() {
 
   function saveBalance(subject: BankUser) {
     if (!user) return;
-    const value = Number(amount);
+    const value = parseAmount(amount);
     if (!Number.isFinite(value) || value <= 0) {
       setError(t("Enter an amount."));
       return;
@@ -182,9 +185,9 @@ export default function AdminPage() {
   function applyBalance(subject: BankUser) {
     if (!user) return;
     setAskBalance(false);
-    const value = Number(amount);
+    const value = parseAmount(amount);
     const current = subject.balances[code];
-    const digits = code === "JPY" ? 0 : 2;
+    const digits = moneyDigits(code);
     const factor = 10 ** digits;
     const next = Math.round((mode === "add" ? current + value : current - value) * factor) / factor;
     const failed = adjustBalance(user.id, subject.id, code, next);
@@ -328,7 +331,7 @@ export default function AdminPage() {
                       <div className="admin-balances">
                         {visibleBalances(item).map((currency) => (
                           <span key={currency.code} className="admin-money">
-                            <small>{currency.code}</small>
+                            <small>{currencyLabel(currency.code)}</small>
                             {money(item.balances[currency.code], currency.code, locale)}
                           </span>
                         ))}
@@ -651,14 +654,7 @@ function BalanceDialog({
 
   if (!subject || typeof document === "undefined") return null;
 
-  const shown = MONEY.filter(
-    (item) =>
-      item.code === "USD" ||
-      item.code === "EUR" ||
-      item.code === "GBP" ||
-      item.code === code ||
-      subject.balances[item.code] > 0,
-  );
+  const shown = listedCurrencies(subject.balances, ["USD", code]);
 
   return createPortal(
     <div className="confirm-layer" onMouseDown={onClose}>
@@ -693,7 +689,7 @@ function BalanceDialog({
           <div className="balance-now-label">{t("Current balance")}</div>
           {shown.map((item) => (
             <div key={item.code} data-current={item.code === code ? "true" : undefined}>
-              <dt>{item.code}</dt>
+              <dt>{currencyLabel(item.code)}</dt>
               <dd className="mono">{money(subject.balances[item.code], item.code, locale)}</dd>
             </div>
           ))}
@@ -713,19 +709,21 @@ function BalanceDialog({
               − {t("Deduct funds")}
             </button>
           </div>
-          <label className="field">
+          <div className="field">
             <span>{t("Currency")}</span>
-            <select value={code} onChange={(event) => onCode(event.target.value as MoneyCode)}>
-              {MONEY.map((item) => (
-                <option key={item.code} value={item.code}>
-                  {item.code} - {t(item.name)}
-                </option>
-              ))}
-            </select>
-          </label>
+            <CurrencySelect
+              label={t("Currency")}
+              value={code}
+              options={MONEY.map((item) => ({
+                code: item.code,
+                label: currencyLabel(item.code),
+              }))}
+              onChange={(next) => onCode(next as MoneyCode)}
+            />
+          </div>
           <label className="field">
             <span>{t("Amount")}</span>
-            <input inputMode="decimal" value={amount} onChange={(event) => onAmount(event.target.value)} />
+            <input inputMode="decimal" value={amount} onChange={(event) => onAmount(formatAmountInput(event.target.value))} />
           </label>
           {error ? <p className="form-error">{error}</p> : null}
           <button className="btn btn-primary" type="submit">

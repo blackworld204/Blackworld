@@ -8,11 +8,11 @@ import { DateSelect } from "@/components/date-select";
 import { toast } from "@/components/toast";
 import { useI18n } from "@/i18n/provider";
 import {
-  MONEY,
   addCard,
   cancelSchedule,
   cardDraftError,
   cardSpendAmount,
+  currencyLabel,
   decideApproval,
   money,
   removeCard,
@@ -25,7 +25,9 @@ import {
   type BankUser,
 } from "@/lib/bank";
 import { cardFaceClass } from "@/lib/card-look";
+import { listedCurrencies } from "@/lib/currencies";
 import { postAccount } from "@/lib/flow-api";
+import { formatAmountInput, parseAmount } from "@/lib/money-input";
 
 type Ask =
   | { kind: "freeze"; id: string; last4: string; frozen: boolean }
@@ -76,7 +78,7 @@ export function AdminAccount({
   const [cardError, setCardError] = useState("");
   const [limit, setLimit] = useState(String(subject.approvalLimit ?? 10000));
   useEffect(() => {
-    setLimit(String(subject.approvalLimit ?? 10000));
+    setLimit(formatAmountInput(String(subject.approvalLimit ?? 10000)));
   }, [subject.id, subject.approvalLimit]);
   const cards = state.cards.filter((item) => item.userId === subject.id);
   const txs = state.txs.filter((item) => item.userId === subject.id);
@@ -111,7 +113,7 @@ export function AdminAccount({
         toast(t(spend.error));
         return;
       }
-      addCard({
+      void addCard({
         userId: subject.id,
         holder: cardForm.holder.trim().toUpperCase(),
         last4: cardForm.last4,
@@ -119,10 +121,15 @@ export function AdminAccount({
         primary: cardForm.primary || cards.length === 0,
         kind: cardForm.kind,
         spendLimit: spend.amount ?? undefined,
+      }).then((failed) => {
+        if (failed) {
+          toast(t(failed));
+          return;
+        }
+        setCardForm(blankCard);
+        setCardError("");
+        toast(t("Card added."));
       });
-      setCardForm(blankCard);
-      setCardError("");
-      toast(t("Card added."));
       return;
     }
     if (choice.kind === "edit") {
@@ -131,31 +138,42 @@ export function AdminAccount({
         toast(t(spend.error));
         return;
       }
-      const failed = updateCard(subject.id, choice.id, {
+      void updateCard(subject.id, choice.id, {
         holder: cardForm.holder,
         last4: cardForm.last4,
         expiry: cardForm.expiry,
         kind: cardForm.kind,
         primary: cardForm.primary,
         spendLimit: spend.amount,
+      }).then((failed) => {
+        if (failed) {
+          toast(t(failed));
+          return;
+        }
+        setCardForm(blankCard);
+        setCardError("");
+        toast(t("Card updated."));
       });
-      if (failed) {
-        toast(t(failed));
-        return;
-      }
-      setCardForm(blankCard);
-      setCardError("");
-      toast(t("Card updated."));
       return;
     }
     if (choice.kind === "freeze") {
-      setCardFrozen(subject.id, choice.id, !choice.frozen);
-      toast(choice.frozen ? t("Card unfrozen.") : t("Card frozen."));
+      void setCardFrozen(subject.id, choice.id, !choice.frozen).then((failed) => {
+        if (failed) {
+          toast(t(failed));
+          return;
+        }
+        toast(choice.frozen ? t("Card unfrozen.") : t("Card frozen."));
+      });
       return;
     }
     if (choice.kind === "card") {
-      removeCard(subject.id, choice.id);
-      toast(t("Card removed."));
+      void removeCard(subject.id, choice.id).then((failed) => {
+        if (failed) {
+          toast(t(failed));
+          return;
+        }
+        toast(t("Card removed."));
+      });
       return;
     }
     if (choice.kind === "schedule") {
@@ -168,7 +186,7 @@ export function AdminAccount({
       return;
     }
     if (choice.kind === "limit") {
-      const failed = setApprovalLimit(subject.id, Number(choice.amount));
+      const failed = setApprovalLimit(subject.id, parseAmount(choice.amount));
       if (failed) {
         toast(t(failed));
         return;
@@ -257,9 +275,9 @@ export function AdminAccount({
       <section className="admin-section">
         <h3>{t("Account")}</h3>
         <dl className="admin-facts">
-          {MONEY.filter((item) => item.code === "USD" || item.code === "EUR" || item.code === "GBP" || subject.balances[item.code] > 0).map((item) => (
+          {listedCurrencies(subject.balances).map((item) => (
             <div key={item.code}>
-              <dt>{item.code}</dt>
+              <dt>{currencyLabel(item.code)}</dt>
               <dd className="mono">{money(subject.balances[item.code], item.code, locale)}</dd>
             </div>
           ))}
@@ -278,7 +296,7 @@ export function AdminAccount({
           className="stack"
           onSubmit={(event) => {
             event.preventDefault();
-            const value = Number(limit);
+            const value = parseAmount(limit);
             if (!Number.isFinite(value) || value < 0) {
               toast(t("Enter an amount of zero or more."));
               return;
@@ -288,7 +306,7 @@ export function AdminAccount({
         >
           <label className="field">
             <span>{t("Approval limit")}</span>
-            <input inputMode="decimal" value={limit} onChange={(event) => setLimit(event.target.value)} />
+            <input inputMode="decimal" value={limit} onChange={(event) => setLimit(formatAmountInput(event.target.value))} />
           </label>
           <button className="btn btn-ghost btn-sm" type="submit">
             {t("Save limit")}
@@ -392,7 +410,7 @@ export function AdminAccount({
               inputMode="decimal"
               value={cardForm.spend}
               placeholder={t("No limit")}
-              onChange={(event) => setCardForm({ ...cardForm, spend: event.target.value })}
+              onChange={(event) => setCardForm({ ...cardForm, spend: formatAmountInput(event.target.value) })}
             />
           </label>
           <label className="choice-line">

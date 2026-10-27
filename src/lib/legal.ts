@@ -107,7 +107,7 @@ export const legalPages = {
         clauses: [
           "Sign-in uses the email and password for the account.",
           "Do not share the password, the PIN, a recovery code, or an API key.",
-          "Tell us promptly if you believe access has been misused, using the phone, WhatsApp, or the support form on this site.",
+          "Tell us promptly if you believe access has been misused, using the email or the support form on this site.",
         ],
       },
       {
@@ -201,7 +201,7 @@ export const legalPages = {
       {
         heading: "Complaints",
         clauses: [
-          "Write to nwekesomto12@gmail.com, call or WhatsApp +234 807 736 8595, or use the support form.",
+          "Write to blackworld1656749@gmail.com, or use the support form.",
           "Include the institution, the email, and what happened. We aim to answer within one business day.",
           "If you are not satisfied, you may take the matter to the courts named in the next section. A live agreement may add its own process.",
         ],
@@ -218,8 +218,7 @@ export const legalPages = {
         heading: "Contact",
         clauses: [
           "Blackworld, 254 San José Street, San Juan, PR 00901.",
-          "Email nwekesomto12@gmail.com.",
-          "Phone and WhatsApp +234 807 736 8595.",
+          "Email blackworld1656749@gmail.com.",
         ],
       },
     ],

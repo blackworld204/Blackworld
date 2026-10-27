@@ -58,30 +58,31 @@ export default function CardsPage() {
   function save() {
     if (!user) return;
     setAskSave(false);
-    if (editId) {
-      const current = cards.find((card) => card.id === editId);
-      const failed = updateCard(user.id, editId, {
-        holder,
-        last4,
-        expiry,
-        kind,
-        primary,
-        spendLimit: current?.spendLimit ?? null,
-      });
-      if (failed) return toast(t(failed));
-      toast(t("Card updated."));
-    } else {
-      addCard({
-        userId: user.id,
-        holder: holder.trim().toUpperCase(),
-        last4,
-        expiry,
-        primary: primary || cards.length === 0,
-        kind,
-      });
-      toast(t("Card added."));
-    }
-    resetForm();
+    const run = editId
+      ? updateCard(user.id, editId, {
+          holder,
+          last4,
+          expiry,
+          kind,
+          primary,
+          spendLimit: cards.find((card) => card.id === editId)?.spendLimit ?? null,
+        })
+      : addCard({
+          userId: user.id,
+          holder: holder.trim().toUpperCase(),
+          last4,
+          expiry,
+          primary: primary || cards.length === 0,
+          kind,
+        });
+    void run.then((failed) => {
+      if (failed) {
+        toast(t(failed));
+        return;
+      }
+      toast(t(editId ? "Card updated." : "Card added."));
+      resetForm();
+    });
   }
 
   return (
@@ -257,14 +258,24 @@ export default function CardsPage() {
         onClose={() => setAsk(null)}
         onConfirm={() => {
           if (!ask) return;
-          if (ask.remove) {
-            removeCard(user.id, ask.id);
-            toast(t("Card removed."));
-          } else {
-            setCardFrozen(user.id, ask.id, !ask.frozen);
-            toast(ask.frozen ? t("Card unfrozen.") : t("Card frozen."));
-          }
+          const choice = ask;
           setAsk(null);
+          const run = choice.remove
+            ? removeCard(user.id, choice.id)
+            : setCardFrozen(user.id, choice.id, !choice.frozen);
+          void run.then((failed) => {
+            if (failed) {
+              toast(t(failed));
+              return;
+            }
+            toast(
+              choice.remove
+                ? t("Card removed.")
+                : choice.frozen
+                  ? t("Card unfrozen.")
+                  : t("Card frozen."),
+            );
+          });
         }}
       />
       <ConfirmDialog

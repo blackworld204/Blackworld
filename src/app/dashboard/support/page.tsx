@@ -7,7 +7,7 @@ import { SupportCenter } from "@/components/support-center";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
 import { when } from "@/lib/bank";
-import { CONTACT_EMAIL, CONTACT_PHONE, CONTACT_PHONE_DISPLAY, CONTACT_WHATSAPP } from "@/lib/contact";
+import { CONTACT_EMAIL } from "@/lib/contact";
 import { firebaseAuth } from "@/lib/firebase";
 import { messageFailure } from "@/lib/message-error";
 
@@ -111,12 +111,7 @@ export default function SupportPage() {
         <p className="kicker">{t("Support")}</p>
         <h1>{t("We read this desk.")}</h1>
         <p className="lede">
-          {t("Messages from {email} go to {contact}.", { email: user.email, contact: CONTACT_EMAIL })}{" "}
-          <a href={`tel:${CONTACT_PHONE}`}>{CONTACT_PHONE_DISPLAY}</a>
-          {" · "}
-          <a href={CONTACT_WHATSAPP} target="_blank" rel="noopener noreferrer">
-            {t("WhatsApp")}
-          </a>
+          {t("Messages from {email} go to {contact}.", { email: user.email, contact: CONTACT_EMAIL })}
         </p>
       </header>
       {user.role === "admin" ? <AdminInbox locale={locale} /> : null}

@@ -14,6 +14,8 @@ import {
   MONEY,
   addNote,
   alertsOf,
+  currencyLabel,
+  hasTransferPin,
   patchUser,
   privacyOf,
   type BankUser,
@@ -21,6 +23,7 @@ import {
 } from "@/lib/bank";
 import { AccountAccess, EmailVerify } from "@/components/account-access";
 import { AccountPhoto } from "@/components/account-photo";
+import { SetPinForm } from "@/components/set-pin-form";
 import { photoDataUrl, publishPhoto, withdrawPhoto } from "@/lib/photos";
 import { bindFirebasePush, releaseFirebasePush } from "@/lib/firebase-push";
 import {
@@ -370,7 +373,7 @@ function SettingsForm({ user }: { user: BankUser }) {
                   value={user.displayCurrency ?? "USD"}
                   options={MONEY.map((item) => ({
                     code: item.code,
-                    label: item.code,
+                    label: currencyLabel(item.code),
                   }))}
                   onChange={(next) =>
                     patchUser(user.id, { displayCurrency: next as MoneyCode })
@@ -383,53 +386,58 @@ function SettingsForm({ user }: { user: BankUser }) {
           {section === "security" ? (
             <div>
               <h2>{t("Security")}</h2>
-              <form className="stack" onSubmit={savePin}>
-                <label className="field">
-                  <span>{t("Current PIN")}</span>
-                  <input
-                    type="password"
-                    inputMode="numeric"
-                    maxLength={4}
-                    value={pinCurrent}
-                    onChange={(event) => setPinCurrent(event.target.value)}
-                    autoComplete="off"
-                  />
-                </label>
-                <div className="split">
+              {hasTransferPin(user) ? (
+                <form className="stack" onSubmit={savePin}>
                   <label className="field">
-                    <span>{t("New PIN")}</span>
+                    <span>{t("Current PIN")}</span>
                     <input
                       type="password"
                       inputMode="numeric"
                       maxLength={4}
-                      value={pinNext}
-                      onChange={(event) => setPinNext(event.target.value)}
+                      value={pinCurrent}
+                      onChange={(event) => setPinCurrent(event.target.value)}
                       autoComplete="off"
                     />
                   </label>
-                  <label className="field">
-                    <span>{t("Confirm")}</span>
-                    <input
-                      type="password"
-                      inputMode="numeric"
-                      maxLength={4}
-                      value={pinConfirm}
-                      onChange={(event) => setPinConfirm(event.target.value)}
-                      autoComplete="off"
-                    />
-                  </label>
-                </div>
-                {pinError ? <p className="form-error">{pinError}</p> : null}
-                {pinMessage ? <p>{pinMessage}</p> : null}
-                <button className="btn btn-primary" type="submit">
-                  {t("Update PIN")}
-                </button>
-              </form>
+                  <div className="split">
+                    <label className="field">
+                      <span>{t("New PIN")}</span>
+                      <input
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={4}
+                        value={pinNext}
+                        onChange={(event) => setPinNext(event.target.value)}
+                        autoComplete="off"
+                      />
+                    </label>
+                    <label className="field">
+                      <span>{t("Confirm")}</span>
+                      <input
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={4}
+                        value={pinConfirm}
+                        onChange={(event) => setPinConfirm(event.target.value)}
+                        autoComplete="off"
+                      />
+                    </label>
+                  </div>
+                  {pinError ? <p className="form-error">{pinError}</p> : null}
+                  {pinMessage ? <p>{pinMessage}</p> : null}
+                  <button className="btn btn-primary" type="submit">
+                    {t("Update PIN")}
+                  </button>
+                </form>
+              ) : (
+                <SetPinForm user={user} />
+              )}
               <AccountAccess userId={user.id} email={user.email} />
               <label className="choice-line">
                 <input
                   type="checkbox"
                   checked={Boolean(user.twoFactor)}
+                  disabled={!hasTransferPin(user)}
                   onChange={(event) => {
                     const on = event.target.checked;
                     askChange(

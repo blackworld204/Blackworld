@@ -14,7 +14,7 @@ import {
   type BankTx,
   type BankUser,
 } from "@/lib/bank";
-import { emptyBalances, isMoneyCode, type MoneyCode } from "@/lib/currencies";
+import { emptyBalances, isMoneyCode, moneyDigits, type MoneyCode } from "@/lib/currencies";
 import { withDeskLock } from "@/lib/desk-store";
 import { quotedRateBook } from "@/lib/rate-hub";
 import { quoteConversion, type RateBook } from "@/lib/rates";
@@ -22,7 +22,7 @@ import { deliverEvents } from "@/lib/send-hook";
 import { openState, sealState } from "@/lib/vault";
 
 function money(code: string, value: number) {
-  const factor = code === "JPY" ? 1 : 100;
+  const factor = moneyDigits(code) === 0 ? 1 : 100;
   return Math.round(value * factor) / factor;
 }
 

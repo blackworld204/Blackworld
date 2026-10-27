@@ -1,21 +1,9 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { CurrencyFlag, hasCurrencyFlag } from "@/components/currency-flag";
+import { CurrencyFlag } from "@/components/currency-flag";
 import { useI18n } from "@/i18n/provider";
 import { countryByIso, joinPhone, listDialCountries, splitPhone } from "@/lib/dial-codes";
-
-function CountryFlag({ iso }: { iso: string }) {
-  if (hasCurrencyFlag(iso)) return <CurrencyFlag code={iso} />;
-  const emoji = [...iso.toUpperCase()]
-    .map((char) => String.fromCodePoint(127397 + char.charCodeAt(0)))
-    .join("");
-  return (
-    <span className="phone-emoji" aria-hidden="true">
-      {emoji}
-    </span>
-  );
-}
 
 function Chevron() {
   return (
@@ -110,7 +98,7 @@ export function PhoneInput({
           aria-label={`${t("Country code")}, ${country.name}, +${country.dial}`}
           onClick={() => setOpen((current) => !current)}
         >
-          <CountryFlag iso={country.iso} />
+          <CurrencyFlag code={country.iso} />
           <span>+{country.dial}</span>
           <Chevron />
         </button>
@@ -145,7 +133,7 @@ export function PhoneInput({
                         setOpen(false);
                       }}
                     >
-                      <CountryFlag iso={item.iso} />
+                      <CurrencyFlag code={item.iso} />
                       <span className="phone-name">{item.name}</span>
                       <span className="phone-dial">+{item.dial}</span>
                     </button>

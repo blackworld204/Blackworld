@@ -1,10 +1,11 @@
 import { runAccountCall } from "@/lib/account-api";
 import { ensureDeskUser } from "@/lib/desk-store";
-import { withDeskAuth } from "@/lib/firestore-desk";
+import { deskUnavailable, withDeskAuth } from "@/lib/firestore-desk";
 import { sameOrigin, signedEmail } from "@/lib/request-guard";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 function cors(request: Request) {
   const headers = new Headers();
@@ -35,6 +36,10 @@ function sessionToken(token: string) {
   return parts.length === 3 && parts.every((part) => part.length > 0);
 }
 
+function deskBusy(error: unknown) {
+  return deskUnavailable(error) || (error instanceof Error && error.message === "firestore");
+}
+
 async function handle(request: Request, method: string, path: string[]) {
   if (method === "OPTIONS") return new Response(null, { status: 204, headers: cors(request) });
   const length = Number(request.headers.get("content-length") ?? 0);
@@ -47,29 +52,42 @@ async function handle(request: Request, method: string, path: string[]) {
   const token = bearerToken(request.headers.get("authorization"));
   let sessionEmail: string | null = null;
   let authorization = request.headers.get("authorization");
-  if (sessionToken(token)) {
-    if (!sameOrigin(request)) return json(request, 401, { error: "unauthorized" });
-    const email = await signedEmail(request);
-    if (!email) return json(request, 401, { error: "unauthorized" });
-    sessionEmail = email;
-    authorization = null;
-    try {
-      await withDeskAuth(token, () => ensureDeskUser(email));
-    } catch (error) {
-      if (error instanceof Error && error.message === "desk-unavailable") return json(request, 503, { error: "unavailable" });
-      throw error;
+  try {
+    if (sessionToken(token)) {
+      if (!sameOrigin(request)) return json(request, 401, { error: "unauthorized" });
+      const email = await signedEmail(request);
+      if (!email) return json(request, 401, { error: "unauthorized" });
+      sessionEmail = email;
+      authorization = null;
     }
+    let result = await withDeskAuth(token, () =>
+      runAccountCall({
+        method,
+        path,
+        authorization,
+        body,
+        sessionEmail,
+      }),
+    );
+    // First sign-in can miss a desk profile. Create it once, then retry the same call.
+    if (result.status === 401 && sessionEmail) {
+      const email = sessionEmail;
+      await withDeskAuth(token, () => ensureDeskUser(email));
+      result = await withDeskAuth(token, () =>
+        runAccountCall({
+          method,
+          path,
+          authorization,
+          body,
+          sessionEmail: email,
+        }),
+      );
+    }
+    return json(request, result.status, result.body);
+  } catch (error) {
+    if (deskBusy(error)) return json(request, 503, { error: "unavailable" });
+    throw error;
   }
-  const result = await withDeskAuth(token, () =>
-    runAccountCall({
-      method,
-      path,
-      authorization,
-      body,
-      sessionEmail,
-    }),
-  );
-  return json(request, result.status, result.body);
 }
 
 export async function GET(request: Request, context: { params: Promise<{ path?: string[] }> }) {
