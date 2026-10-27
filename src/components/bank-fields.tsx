@@ -3,7 +3,11 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { CurrencyFlag } from "@/components/currency-flag";
 import { useI18n } from "@/i18n/provider";
-import { BANK_COUNTRIES, banksIn } from "@/lib/banks";
+import { BANK_COUNTRIES, banksIn, loadBanksForCountry, type BankOption } from "@/lib/banks";
+
+const FULL_LIST_LIMIT = 300;
+const PREVIEW_LIMIT = 150;
+const SEARCH_LIMIT = 500;
 
 function useDismissibleMenu(
   open: boolean,
@@ -48,11 +52,12 @@ export function BankFields({
   onBank: (name: string) => void;
 }) {
   const { t } = useI18n();
-  const banks = banksIn(country);
+  const [banks, setBanks] = useState<BankOption[]>(() => banksIn(country));
+  const [banksLoading, setBanksLoading] = useState(false);
   const known = banks.some((item) => item.name === bank);
   const [countryOpen, setCountryOpen] = useState(false);
   const [bankOpen, setBankOpen] = useState(false);
-  const [manual, setManual] = useState(() => Boolean(bank) && !banks.some((item) => item.name === bank));
+  const [manual, setManual] = useState(() => Boolean(bank) && !banksIn(country).some((item) => item.name === bank));
   const [countryQuery, setCountryQuery] = useState("");
   const [bankQuery, setBankQuery] = useState("");
   const countryRoot = useRef<HTMLDivElement>(null);
@@ -63,6 +68,20 @@ export function BankFields({
   const countryListId = useId();
   const bankListId = useId();
   const current = BANK_COUNTRIES.find((item) => item.code === country) ?? BANK_COUNTRIES[0];
+
+  useEffect(() => {
+    let cancelled = false;
+    setBanks(banksIn(country));
+    setBanksLoading(true);
+    loadBanksForCountry(country).then((list) => {
+      if (cancelled) return;
+      setBanks(list);
+      setBanksLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [country]);
 
   const filteredCountries = useMemo(() => {
     const folded = countryQuery.trim().toLowerCase();
@@ -75,11 +94,19 @@ export function BankFields({
     );
   }, [countryQuery, t]);
 
-  const filteredBanks = useMemo(() => {
+  const matchedBanks = useMemo(() => {
     const folded = bankQuery.trim().toLowerCase();
     if (!folded) return banks;
     return banks.filter((item) => item.name.toLowerCase().includes(folded));
   }, [bankQuery, banks]);
+
+  const visibleBanks = useMemo(() => {
+    if (bankQuery.trim()) return matchedBanks.slice(0, SEARCH_LIMIT);
+    if (matchedBanks.length <= FULL_LIST_LIMIT) return matchedBanks;
+    return matchedBanks.slice(0, PREVIEW_LIMIT);
+  }, [matchedBanks, bankQuery]);
+
+  const hiddenCount = matchedBanks.length - visibleBanks.length;
 
   const customBank = bankQuery.trim();
   const canUseCustom =
@@ -212,7 +239,7 @@ export function BankFields({
                 <span>{bank || t("Choose a bank")}</span>
               </button>
               {bankOpen ? (
-                <div className="ccy-menu-panel">
+                <div className="ccy-menu-panel bank-menu-panel">
                   <div className="ccy-search">
                     <span className="sr-only">{t("Search banks")}</span>
                     <input
@@ -230,14 +257,14 @@ export function BankFields({
                     />
                   </div>
                   <ul className="ccy-menu" id={bankListId} role="listbox" aria-label={t("Bank name")}>
+                    {banksLoading && banks.length === 0 ? (
+                      <li className="ccy-empty" role="presentation">
+                        {t("Loading banks…")}
+                      </li>
+                    ) : null}
                     {bank && !known ? (
                       <li>
-                        <button
-                          type="button"
-                          role="option"
-                          aria-selected
-                          onClick={() => pickBank(bank)}
-                        >
+                        <button type="button" role="option" aria-selected onClick={() => pickBank(bank)}>
                           <span>{bank}</span>
                         </button>
                       </li>
@@ -256,8 +283,8 @@ export function BankFields({
                         </button>
                       </li>
                     ) : null}
-                    {filteredBanks.map((item) => (
-                      <li key={item.name}>
+                    {visibleBanks.map((item) => (
+                      <li key={`${item.swift ?? ""}:${item.name}`}>
                         <button
                           type="button"
                           role="option"
@@ -268,7 +295,19 @@ export function BankFields({
                         </button>
                       </li>
                     ))}
-                    {filteredBanks.length === 0 && !canUseCustom && !(bank && !known) ? (
+                    {hiddenCount > 0 ? (
+                      <li className="ccy-empty" role="presentation">
+                        {t("Showing {shown} of {total}. Type to find a bank.", {
+                          shown: String(visibleBanks.length),
+                          total: String(matchedBanks.length),
+                        })}
+                      </li>
+                    ) : !banksLoading && banks.length > 0 ? (
+                      <li className="ccy-empty bank-menu-count" role="presentation">
+                        {t("{count} banks in this country.", { count: String(banks.length) })}
+                      </li>
+                    ) : null}
+                    {filteredBanksEmpty(visibleBanks, canUseCustom, bank, known, banksLoading) ? (
                       <li className="ccy-empty" role="presentation">
                         {t("No bank found.")}
                       </li>
@@ -292,4 +331,14 @@ export function BankFields({
       </div>
     </div>
   );
+}
+
+function filteredBanksEmpty(
+  visibleBanks: BankOption[],
+  canUseCustom: boolean,
+  bank: string,
+  known: boolean,
+  banksLoading: boolean,
+) {
+  return visibleBanks.length === 0 && !canUseCustom && !(bank && !known) && !banksLoading;
 }

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { BankFields } from "@/components/bank-fields";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DateSelect } from "@/components/date-select";
+import { OtpDialog } from "@/components/otp-dialog";
 import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
@@ -16,7 +17,7 @@ const statusLabel = {
   scheduled: "Scheduled",
   paid: "Paid",
   failed: "Failed",
-  held: "Held for approval",
+  held: "Waiting for OTP",
 } as const;
 
 export default function SchedulePage() {
@@ -36,6 +37,8 @@ export default function SchedulePage() {
   const [error, setError] = useState("");
   const [drop, setDrop] = useState<{ id: string; holder: string } | null>(null);
   const [ask, setAsk] = useState(false);
+  const [otp, setOtp] = useState<{ id: string; expiresAt: string } | null>(null);
+  const [otpOpen, setOtpOpen] = useState(false);
 
   if (!state || !user) return <div className="app-hold" />;
   const rows = state.schedules.filter((item) => item.userId === user.id);
@@ -86,7 +89,7 @@ export default function SchedulePage() {
           status === "failed"
             ? "Not enough balance."
             : status === "held"
-              ? "Waiting for an admin to approve."
+              ? "For security purposes, get the OTP from an admin."
               : status === "paid"
                 ? "Transfer sent."
                 : "Scheduled.",
@@ -100,26 +103,52 @@ export default function SchedulePage() {
       <header className="app-intro">
         <p className="kicker">{t("Schedule")}</p>
         <h1>{t("Pay later")}</h1>
-        <p className="lede">{t("It runs on or after the date. The 1% fee is taken then.")}</p>
+        <p className="lede">
+          {t("It runs on or after the date. The 1% fee is taken then. For security purposes, an admin OTP is required when it runs.")}
+        </p>
       </header>
       {rows.length === 0 ? <p className="muted">{t("No scheduled transfers.")}</p> : null}
       <ul className="tx-list">
-        {rows.map((item) => (
-          <li key={item.id}>
-            <div>
-              <strong>{item.holder}</strong>
-              <span className="muted">
-                {item.runOn} · {t(statusLabel[item.status])}
-              </span>
-            </div>
-            <span className="mono">{money(item.amount, item.currency, locale)}</span>
-            {item.status === "scheduled" ? (
-              <button type="button" className="text-button" onClick={() => setDrop({ id: item.id, holder: item.holder })}>
-                {t("Cancel")}
-              </button>
-            ) : null}
-          </li>
-        ))}
+        {rows.map((item) => {
+          const waiting =
+            item.status === "held"
+              ? state.approvals.find(
+                  (row) =>
+                    row.userId === user.id &&
+                    row.status === "pending" &&
+                    row.otpExpiresAt &&
+                    (row.ref === item.id || row.holder === item.holder),
+                )
+              : null;
+          return (
+            <li key={item.id}>
+              <div>
+                <strong>{item.holder}</strong>
+                <span className="muted">
+                  {item.runOn} · {t(statusLabel[item.status])}
+                </span>
+              </div>
+              <span className="mono">{money(item.amount, item.currency, locale)}</span>
+              {item.status === "scheduled" ? (
+                <button type="button" className="text-button" onClick={() => setDrop({ id: item.id, holder: item.holder })}>
+                  {t("Cancel")}
+                </button>
+              ) : null}
+              {waiting?.otpExpiresAt ? (
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => {
+                    setOtp({ id: waiting.id, expiresAt: waiting.otpExpiresAt! });
+                    setOtpOpen(true);
+                  }}
+                >
+                  {t("Get OTP from admin")}
+                </button>
+              ) : null}
+            </li>
+          );
+        })}
       </ul>
       <form className="stack" onSubmit={submit}>
         <h2>{t("Schedule a transfer")}</h2>
@@ -204,10 +233,23 @@ export default function SchedulePage() {
       <ConfirmDialog
         open={ask}
         title={t("Schedule this transfer?")}
-        body={t("It runs on {date}.", { date: runOn })}
+        body={t("It runs on {date}. For security purposes, an admin OTP is required when it runs.", { date: runOn })}
         confirmLabel={t("Schedule")}
         onClose={() => setAsk(false)}
         onConfirm={schedule}
+      />
+      <OtpDialog
+        open={otpOpen && otp !== null}
+        approvalId={otp?.id ?? null}
+        expiresAt={otp?.expiresAt ?? null}
+        title={t("Get OTP from admin")}
+        body={t("For security purposes, get the 6-digit OTP from an admin. This security check expires in 24 hours.")}
+        onClose={() => setOtpOpen(false)}
+        onVerified={() => {
+          setOtpOpen(false);
+          setOtp(null);
+          toast(t("OTP accepted."));
+        }}
       />
     </div>
   );

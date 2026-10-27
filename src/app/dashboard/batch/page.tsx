@@ -5,6 +5,7 @@ import { BankFields } from "@/components/bank-fields";
 import { BusyButton } from "@/components/busy-button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CurrencySelect } from "@/components/currency-select";
+import { OtpDialog } from "@/components/otp-dialog";
 import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
@@ -19,7 +20,7 @@ type Line = { holder: string; account: string; amount: string; currency: MoneyCo
 const empty = (): Line => ({ holder: "", account: "", amount: "", currency: "USD" });
 
 export default function BatchPage() {
-  const { user } = useAccount();
+  const { state, user } = useAccount();
   const { t, locale } = useI18n();
   const [country, setCountry] = useState("US");
   const [bank, setBank] = useState("");
@@ -29,10 +30,14 @@ export default function BatchPage() {
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState<{ paid: number; held: number } | null>(null);
+  const [done, setDone] = useState<{ held: number } | null>(null);
   const [pending, setPending] = useState<Array<Line & { value: number }> | null>(null);
+  const [otpQueue, setOtpQueue] = useState<Array<{ id: string; expiresAt: string }>>([]);
+  const [otpOpen, setOtpOpen] = useState(false);
 
-  if (!user) return <div className="app-hold" />;
+  if (!state || !user) return <div className="app-hold" />;
+
+  const currentOtp = otpQueue[0] ?? null;
 
   function update(index: number, patch: Partial<Line>) {
     setLines((current) => current.map((line, i) => (i === index ? { ...line, ...patch } : line)));
@@ -79,16 +84,25 @@ export default function BatchPage() {
       amount: line.value,
       currency: line.currency,
     }));
-    void postAccount<{ payments?: { status?: string }[] }>("payments/batch", { payments }).then((result) => {
+    void postAccount<{ payments?: { status?: string; id?: string; expiresAt?: string }[] }>("payments/batch", {
+      payments,
+    }).then((result) => {
+      setBusy(false);
       if (result.error || !result.body?.payments) {
-        setBusy(false);
         setError(t(result.error || "The request failed."));
         return;
       }
-      const held = result.body.payments.filter((item) => item.status === "pending").length;
-      const paid = result.body.payments.filter((item) => item.status === "paid").length;
-      setDone({ paid, held });
-      toast(t("Batch sent."));
+      const waiting = result.body.payments
+        .filter((item) => item.status === "pending" && item.id && item.expiresAt)
+        .map((item) => ({ id: item.id!, expiresAt: item.expiresAt! }));
+      setDone({ held: waiting.length });
+      setOtpQueue(waiting);
+      if (waiting.length > 0) {
+        setOtpOpen(true);
+        toast(t("For security purposes, get the OTP from an admin."));
+      } else {
+        toast(t("Batch sent."));
+      }
     });
   }
 
@@ -97,13 +111,44 @@ export default function BatchPage() {
       <div className="app-pad">
         <header className="app-intro">
           <p className="kicker">{t("Batch")}</p>
-          <h1>{t("{count} transfers recorded.", { count: done.paid })}</h1>
+          <h1>
+            {otpQueue.length === 0
+              ? t("Batch complete.")
+              : t("{count} waiting for OTP.", { count: otpQueue.length })}
+          </h1>
           <p className="lede">
-            {done.held > 0
-              ? t("{count} waiting for approval.", { count: done.held })
+            {otpQueue.length > 0
+              ? t("For security purposes, get each OTP from an admin. This security check expires in 24 hours.")
               : t("The batch is on the account.")}
           </p>
         </header>
+        {currentOtp ? (
+          <div className="otp-flow-actions">
+            <button className="btn btn-primary" type="button" onClick={() => setOtpOpen(true)}>
+              {t("Get OTP from admin")}
+            </button>
+          </div>
+        ) : null}
+        <OtpDialog
+          open={otpOpen && currentOtp !== null}
+          approvalId={currentOtp?.id ?? null}
+          expiresAt={currentOtp?.expiresAt ?? null}
+          title={t("Get OTP from admin")}
+          body={t("For security purposes, get the 6-digit OTP from an admin. This security check expires in 24 hours.")}
+          onClose={() => setOtpOpen(false)}
+          onVerified={() => {
+            setOtpOpen(false);
+            setOtpQueue((queue) => {
+              const next = queue.slice(1);
+              if (next.length > 0) {
+                window.setTimeout(() => setOtpOpen(true), 200);
+              } else {
+                toast(t("OTP accepted."));
+              }
+              return next;
+            });
+          }}
+        />
       </div>
     );
   }
@@ -113,7 +158,9 @@ export default function BatchPage() {
       <header className="app-intro">
         <p className="kicker">{t("Batch")}</p>
         <h1>{t("Batch payments")}</h1>
-        <p className="lede">{t("Each line is a separate transfer with a 1% fee. Members above the approval limit wait for an admin.")}</p>
+        <p className="lede">
+          {t("Each line is a separate transfer with a 1% fee. After your PIN, an admin OTP is required for security.")}
+        </p>
       </header>
       <form className="stack" onSubmit={submit}>
         <BankFields
@@ -191,7 +238,7 @@ export default function BatchPage() {
       <ConfirmDialog
         open={pending !== null}
         title={t("Send this batch?")}
-        body={t("{count} transfers will be sent.", { count: pending?.length ?? 0 })}
+        body={t("{count} transfers wait for an admin OTP after your PIN.", { count: pending?.length ?? 0 })}
         confirmLabel={t("Send batch")}
         onClose={() => setPending(null)}
         onConfirm={sendPending}

@@ -113,6 +113,11 @@ export type BankTx = {
   direction: "in" | "out";
   at: string;
   ref?: string;
+  /** Pending until an admin OTP is entered; posted after verify. */
+  status?: "pending" | "posted" | "expired";
+  approvalId?: string;
+  /** Exact OTP deadline for this pending receipt (ISO). */
+  otpExpiresAt?: string;
 };
 
 export type BankCard = {
@@ -160,6 +165,10 @@ export type BankNote = {
   at: string;
   read: boolean;
   channel?: NoteChannel;
+  /** Links a transfer notice to its transaction receipt. */
+  txId?: string;
+  /** On an admin’s copy of a member event — the member the notice is about. */
+  relatedUserId?: string;
 };
 
 export type TransferDraft = {
@@ -183,12 +192,45 @@ export type BankSchedule = TransferDraft & {
 export type BankApproval = TransferDraft & {
   id: string;
   fee: number;
-  status: "pending" | "approved" | "declined";
+  status: "pending" | "approved" | "declined" | "expired";
   at: string;
   ref?: string;
-  /** A deposit waits for an admin before any balance changes. */
-  kind?: "transfer" | "deposit";
+  /** Waits for an admin OTP before anything changes. */
+  kind?: "transfer" | "deposit" | "card" | "exchange";
+  /** When set, completion needs the 6-digit OTP an admin creates. */
+  otpExpiresAt?: string;
+  otpCode?: string;
+  otpIssuedAt?: string;
+  txId?: string;
+  cardExpiry?: string;
+  cardKind?: "virtual" | "physical";
+  cardPrimary?: boolean;
+  exchangeTo?: MoneyCode;
+  exchangeConverted?: number;
+  exchangeRate?: number;
 };
+
+/** Admin OTP for send / deposit / card is valid for one day. */
+export const OTP_TTL_MS = 24 * 60 * 60 * 1000;
+
+export function otpExpired(row: Pick<BankApproval, "otpExpiresAt" | "status">, now = Date.now()) {
+  if (row.status === "expired") return true;
+  if (!row.otpExpiresAt) return false;
+  return Date.parse(row.otpExpiresAt) <= now;
+}
+
+export function otpRemainingMs(expiresAt: string, now = Date.now()) {
+  return Math.max(0, Date.parse(expiresAt) - now);
+}
+
+export function formatOtpCountdown(expiresAt: string, now = Date.now()) {
+  const ms = otpRemainingMs(expiresAt, now);
+  const total = Math.floor(ms / 1000);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
 
 export type BankEvent = {
   id: string;
@@ -288,6 +330,7 @@ export function normalizeBank(parsed: Partial<BankState>): BankState {
       note.channel === "admin" || note.channel === "transfer" || note.channel === "security" || note.channel === "statement"
         ? note.channel
         : undefined,
+    txId: typeof note.txId === "string" && note.txId.length > 0 ? note.txId : undefined,
   }))).filter((note) => note.id !== "note_deposit_bw" && note.id !== "note_admin_bw");
   return {
     users: keptUsers,
@@ -820,7 +863,7 @@ export function addUser(input: {
       }
     : null;
   const openedAt = new Date().toISOString();
-  const opened = state.users
+  const opened: BankNote[] = state.users
     .filter((item) => item.role === "admin")
     .map((item) => ({
       id: id("note"),
@@ -829,6 +872,7 @@ export function addUser(input: {
       body: `${input.name} · ${input.email}`,
       at: openedAt,
       read: false,
+      relatedUserId: user.id,
     }));
   const welcome: BankNote = {
     id: id("note"),
@@ -881,6 +925,8 @@ function applyMove(
     body,
     at: record.at,
     read: false,
+    channel: "transfer",
+    txId: record.id,
   };
   const event: BankEvent = { id: id("evt"), userId, title: tx.title, body, at: record.at };
   return {
@@ -1070,40 +1116,18 @@ export function decideApproval(approvalId: string, actorId: string, approve: boo
   if (!actor || actor.role !== "admin") return "Only an admin can decide.";
   const row = state.approvals.find((item) => item.id === approvalId);
   if (!row || row.status !== "pending") return "That transfer is no longer waiting.";
-  if (!approve) {
-    saveBank({
-      ...loadBank(),
-      approvals: loadBank().approvals.map((item) =>
-        item.id === approvalId ? { ...item, status: "declined" } : item,
-      ),
-    });
-    return null;
+  // Local fallback never moves money. Completing requires the admin OTP on the desk API.
+  if (approve) {
+    return "Create an OTP for this request. Nothing moves until the member enters that OTP.";
   }
-  if (row.kind === "deposit") {
-    const net = Math.round((row.amount - row.fee) * 100) / 100;
-    const failed = moveMoney(row.userId, "USD", net, {
-      title: row.holder,
-      detail: `Fee USD ${row.fee.toFixed(2)}`,
-      amount: net,
-      direction: "in",
-    });
-    if (failed) return failed;
-    const payer = loadBank().users.find((user) => user.id === row.userId);
-    const rewarded = payer ? payReferralOnDeposit(loadBank(), payer) : null;
-    if (rewarded) saveBank(rewarded.state);
-    const next = loadBank();
-    saveBank({
-      ...next,
-      approvals: next.approvals.map((item) => (item.id === approvalId ? { ...item, status: "approved" } : item)),
-    });
-    return null;
-  }
-  const failed = payTransfer(row.userId, row);
-  if (failed) return failed;
-  const next = loadBank();
   saveBank({
-    ...next,
-    approvals: next.approvals.map((item) => (item.id === approvalId ? { ...item, status: "approved" } : item)),
+    ...state,
+    approvals: state.approvals.map((item) =>
+      item.id === approvalId ? { ...item, status: "declined" as const } : item,
+    ),
+    txs: state.txs.map((item) =>
+      row.txId && item.id === row.txId ? { ...item, status: "expired" as const } : item,
+    ),
   });
   return null;
 }

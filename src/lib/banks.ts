@@ -588,13 +588,69 @@ export const BANK_COUNTRIES: BankCountry[] = WORLD_COUNTRIES.map((item) => ({
   banks: BANKS_BY_COUNTRY[item.code] ?? [],
 }));
 
+const bankCache = new Map<string, BankOption[]>();
+const bankLoads = new Map<string, Promise<BankOption[]>>();
+
+function curatedBanks(code: string) {
+  return BANKS_BY_COUNTRY[code] ?? [];
+}
+
+function mergeBanks(preferred: BankOption[], extra: BankOption[]) {
+  const seen = new Set(preferred.map((item) => item.name.trim().toLowerCase()));
+  const merged = [...preferred];
+  for (const item of extra) {
+    const key = item.name.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    merged.push(item);
+  }
+  return merged;
+}
+
+/** Seed list (curated). Prefer loadBanksForCountry for the full country directory. */
 export function banksIn(code: string) {
-  return BANK_COUNTRIES.find((item) => item.code === code)?.banks ?? [];
+  return bankCache.get(code) ?? curatedBanks(code);
+}
+
+/** Loads the full bank directory for a country (SWIFT registry), merged with curated favorites. */
+export function loadBanksForCountry(code: string) {
+  const cached = bankCache.get(code);
+  if (cached) return Promise.resolve(cached);
+  const pending = bankLoads.get(code);
+  if (pending) return pending;
+
+  const request = (async () => {
+    const seed = curatedBanks(code);
+    try {
+      const response = await fetch(`/data/banks/${encodeURIComponent(code)}.json`, {
+        credentials: "same-origin",
+      });
+      if (!response.ok) {
+        bankCache.set(code, seed);
+        return seed;
+      }
+      const remote = (await response.json()) as BankOption[];
+      const merged = mergeBanks(seed, Array.isArray(remote) ? remote : []);
+      bankCache.set(code, merged);
+      return merged;
+    } catch {
+      bankCache.set(code, seed);
+      return seed;
+    } finally {
+      bankLoads.delete(code);
+    }
+  })();
+
+  bankLoads.set(code, request);
+  return request;
 }
 
 export function countryOfBank(name: string) {
   const needle = name.trim().toLowerCase();
   if (!needle) return "US";
+  for (const [code, banks] of bankCache) {
+    if (banks.some((bank) => bank.name.toLowerCase() === needle)) return code;
+  }
   return BANK_COUNTRIES.find((item) => item.banks.some((bank) => bank.name.toLowerCase() === needle))?.code ?? "US";
 }
 

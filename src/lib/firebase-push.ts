@@ -36,7 +36,7 @@ export async function bindFirebasePush(userId: string) {
       const data = payload.data ?? {};
       const title = data.title || payload.notification?.title || "Blackworld";
       const body = data.body || payload.notification?.body || "";
-      void showPush(title, body, data.tag || payload.messageId || "firebase");
+      void showPush(title, body, data.tag || payload.messageId || "firebase", data.url || "/dashboard/notifications");
     }),
   ];
   stopListen = () => {

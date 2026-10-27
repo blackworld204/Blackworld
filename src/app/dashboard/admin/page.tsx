@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AccountPhoto } from "@/components/account-photo";
 import { AdminAccount } from "@/components/admin-account";
@@ -108,12 +109,16 @@ function Mark({ name }: { name: "balance" | "block" | "allow" | "remove" | "shie
   );
 }
 
-export default function AdminPage() {
+function AdminPageInner() {
   const { state, user } = useAccount();
   const { t, locale } = useI18n();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [focusNoteId, setFocusNoteId] = useState<string | null>(null);
+  const [focusApprovalId, setFocusApprovalId] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [askBalance, setAskBalance] = useState(false);
   const [code, setCode] = useState<MoneyCode>("USD");
@@ -141,6 +146,29 @@ export default function AdminPage() {
   useEffect(() => {
     setPage((value) => Math.min(Math.max(1, value), pageCount));
   }, [pageCount]);
+
+  useEffect(() => {
+    const nextUser = searchParams.get("user");
+    const nextNote = searchParams.get("note");
+    const nextApproval = searchParams.get("approval");
+    if (nextUser) setOpenId(nextUser);
+    setFocusNoteId(nextNote);
+    setFocusApprovalId(nextApproval);
+  }, [searchParams]);
+
+  const clearFocusParams = useCallback(() => {
+    setFocusNoteId(null);
+    setFocusApprovalId(null);
+    if (
+      !searchParams.get("user") &&
+      !searchParams.get("note") &&
+      !searchParams.get("approval") &&
+      !searchParams.get("tx")
+    ) {
+      return;
+    }
+    router.replace("/dashboard/admin", { scroll: false });
+  }, [router, searchParams]);
 
   if (!state || !user) return <div className="app-hold" />;
   if (user.role !== "admin") {
@@ -220,7 +248,13 @@ export default function AdminPage() {
           admin={user}
           subject={opened}
           state={state}
-          onBack={() => setOpenId(null)}
+          focusNoteId={focusNoteId}
+          focusApprovalId={focusApprovalId}
+          onFocusHandled={clearFocusParams}
+          onBack={() => {
+            setOpenId(null);
+            clearFocusParams();
+          }}
           onCredit={() => openBalance(opened)}
           onNotice={() => setNotice({ userIds: [opened.id], name: opened.name })}
           onStatus={() =>
@@ -586,6 +620,14 @@ export default function AdminPage() {
         }}
       />
     </div>
+  );
+}
+
+export default function AdminPage() {
+  return (
+    <Suspense fallback={<div className="app-hold" />}>
+      <AdminPageInner />
+    </Suspense>
   );
 }
 

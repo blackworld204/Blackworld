@@ -7,6 +7,14 @@ import { Glyph } from "@/components/glyph";
 import { useSession } from "@/components/session";
 import { useI18n } from "@/i18n/provider";
 import { loadBank, markNote, noteIsQuiet, notesFor, subscribeBank, userByEmail, type BankNote } from "@/lib/bank";
+import { noteOpenHref } from "@/lib/receipt";
+
+function viewerForInbox(email: string | undefined) {
+  if (!email) return null;
+  const state = loadBank();
+  const user = userByEmail(state, email);
+  return user ? { id: user.id, role: user.role } : null;
+}
 
 export function Inbox() {
   const pathname = usePathname();
@@ -102,7 +110,10 @@ export function Inbox() {
         <div className="inbox-live" aria-live="polite">
           {live.map((note) => (
             <article key={note.id}>
-              <Link href="/dashboard/notifications" onClick={() => openNote(note.id)}>
+              <Link
+                href={noteOpenHref(loadBank(), note, viewerForInbox(session?.email))}
+                onClick={() => openNote(note.id)}
+              >
                 <strong>{t(note.title)}</strong>
                 <span>{t(note.body)}</span>
               </Link>

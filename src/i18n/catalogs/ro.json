@@ -663,6 +663,7 @@
  "United Arab Emirates": "Emiratele Arabe Unite",
  "United Kingdom": "Regatul Unit",
  "Print receipt": "Tipăriți chitanța",
+ "Download receipt": "Descărcați chitanța",
  "Issued to": "Emis către",
  "Search users": "Căutați utilizatori",
  "Manage balance": "Gestionați soldul",
@@ -840,5 +841,7 @@
  "Sign-in uses the email and password on the account.": "Conectarea folosește e-mailul și parola din cont.",
  "The converter requests public mid-market rates. If that request fails, the page uses the rates bundled with the site.": "Convertorul solicită tarife publice medii ale pieței. Dacă această solicitare eșuează, pagina folosește tarifele incluse în pachet cu site-ul.",
  "Blackworld is a full-reserve bank licensed by OCIF in Puerto Rico. Services on this site are for businesses, fintechs, and institutions.": "Blackworld este o bancă cu rezerve complete licențiată de OCIF în Puerto Rico. Serviciile de pe acest site sunt destinate companiilor, fintech-urilor și instituțiilor.",
- "The platform is SOC 2 Type II, with a 99.99% API uptime target.": "Platforma este SOC 2 Type II, cu o țintă de funcționare API de 99,99%."
+ "The platform is SOC 2 Type II, with a 99.99% API uptime target.": "Platforma este SOC 2 Type II, cu o țintă de funcționare API de 99,99%.",
+ "Transaction receipt": "Chitanță tranzacție",
+ "Posted": "Înregistrat"
 }

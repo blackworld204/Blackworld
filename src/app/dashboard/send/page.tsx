@@ -7,6 +7,7 @@ import { BusyButton } from "@/components/busy-button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CurrencyFlag } from "@/components/currency-flag";
 import { CurrencySelect } from "@/components/currency-select";
+import { OtpDialog } from "@/components/otp-dialog";
 import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
@@ -53,6 +54,8 @@ export default function SendPage() {
   const [dropPayee, setDropPayee] = useState<string | null>(null);
   const [askPay, setAskPay] = useState(false);
   const [askSave, setAskSave] = useState(false);
+  const [otp, setOtp] = useState<{ id: string; expiresAt: string } | null>(null);
+  const [otpOpen, setOtpOpen] = useState(false);
 
   if (!state || !user) return <div className="app-hold" />;
   const payees = state.payees.filter((payee) => payee.userId === user.id);
@@ -107,34 +110,49 @@ export default function SendPage() {
       currency: draft.currency,
       ref: `pay_${Math.random().toString(36).slice(2, 12)}${Date.now().toString(36)}`.slice(0, 40),
     };
-    void postAccount<{ status?: string }>("payments", payment)
+    void postAccount<{ status?: string; id?: string; expiresAt?: string }>("payments", payment)
       .then((result) => {
         if (result.error) {
           setError(t(result.error));
           return;
         }
-        if (result.body?.status === "pending") {
-          toast(t("Waiting for an admin to approve."));
+        if (result.body?.status === "pending" && result.body.id && result.body.expiresAt) {
+          toast(t("For security purposes, get the OTP from an admin."));
           setHeld(true);
-        } else {
-          toast(t("Transfer sent."));
-          setRef(`BW-${Math.floor(100000 + Math.random() * 900000)}`);
+          setOtp({ id: result.body.id, expiresAt: result.body.expiresAt });
+          // Stay on the confirm screen and show the OTP popup first.
+          setOtpOpen(true);
+          return;
         }
+        toast(t("Transfer sent."));
+        setHeld(false);
+        setRef(`BW-${Math.floor(100000 + Math.random() * 900000)}`);
         setStep(2);
       })
       .catch(() => setError(t("The desk could not be reached.")))
       .finally(() => setBusy(false));
   }
 
+  function finishOtp(verified: boolean) {
+    setOtpOpen(false);
+    if (verified) {
+      setOtp(null);
+      setHeld(false);
+      setRef(`BW-${Math.floor(100000 + Math.random() * 900000)}`);
+      toast(t("Transfer sent."));
+    }
+    setStep(2);
+  }
+
   if (step === 2) {
     return (
       <div className="app-pad">
         <header className="app-intro">
-          <p className="kicker">{t("Sent")}</p>
-          <h1>{held ? t("Waiting for approval") : t("On its way.")}</h1>
+          <p className="kicker">{held ? t("Security check") : t("Sent")}</p>
+          <h1>{held ? t("Waiting for admin OTP") : t("On its way.")}</h1>
           <p className="lede">
             {held
-              ? t("Held for approval. An admin releases it from Approvals. Nothing has moved yet.")
+              ? t("For security purposes, get the 6-digit OTP from an admin. Nothing has moved yet.")
               : t("{amount} to {holder}.", { amount: money(amount, draft.currency, locale), holder: draft.holder })}
             {held ? null : (
               <>
@@ -144,8 +162,21 @@ export default function SendPage() {
             )}
           </p>
         </header>
-        <div className="form-row">
-          <Link className="btn btn-primary" href="/dashboard">
+        <div className="otp-flow-actions">
+          {held && otp ? (
+            <button
+              className="btn btn-primary"
+              type="button"
+              onClick={() => {
+                const row = state.approvals.find((item) => item.id === otp.id && item.status === "pending");
+                if (row?.otpExpiresAt) setOtp({ id: row.id, expiresAt: row.otpExpiresAt });
+                setOtpOpen(true);
+              }}
+            >
+              {t("Get OTP from admin")}
+            </button>
+          ) : null}
+          <Link className={held ? "btn btn-ghost" : "btn btn-primary"} href="/dashboard">
             {t("Back to dashboard")}
           </Link>
           {savedAlready || saved ? (
@@ -168,6 +199,8 @@ export default function SendPage() {
               setSaved(false);
               setHeld(false);
               setBusy(false);
+              setOtp(null);
+              setOtpOpen(false);
               setRef("");
               setError("");
               setStep(0);
@@ -176,6 +209,36 @@ export default function SendPage() {
             {t("New transfer")}
           </button>
         </div>
+        <ConfirmDialog
+          open={askSave}
+          title={t("Save this recipient?")}
+          body={t("The account is kept for the next transfer.")}
+          confirmLabel={t("Save recipient")}
+          onClose={() => setAskSave(false)}
+          onConfirm={() => {
+            if (!user) return;
+            addPayee({
+              userId: user.id,
+              holder: draft.holder.trim(),
+              bank: draft.bank.trim(),
+              routing: draft.routing.trim(),
+              swift: draft.swift.trim(),
+              account: draft.account.trim(),
+              currency: draft.currency,
+            });
+            setAskSave(false);
+            setSaved(true);
+          }}
+        />
+        <OtpDialog
+          open={otpOpen && otp !== null}
+          approvalId={otp?.id ?? null}
+          expiresAt={otp?.expiresAt ?? null}
+          title={t("Get OTP from admin")}
+          body={t("For security purposes, get the 6-digit OTP from an admin. This security check expires in 24 hours.")}
+          onClose={() => setOtpOpen(false)}
+          onVerified={() => finishOtp(true)}
+        />
       </div>
     );
   }
@@ -188,7 +251,7 @@ export default function SendPage() {
         <p className="lede">
           {step === 0
             ? t("US routing number or SWIFT. The 1% fee is included before you confirm.")
-            : t("Authorize with your PIN.")}
+            : t("Authorize with your PIN. For security purposes, an admin OTP is required next.")}
         </p>
       </header>
 
@@ -388,6 +451,15 @@ export default function SendPage() {
           setAskSave(false);
           setSaved(true);
         }}
+      />
+      <OtpDialog
+        open={otpOpen && otp !== null && step < 2}
+        approvalId={otp?.id ?? null}
+        expiresAt={otp?.expiresAt ?? null}
+        title={t("Get OTP from admin")}
+        body={t("For security purposes, get the 6-digit OTP from an admin. This security check expires in 24 hours.")}
+        onClose={() => finishOtp(false)}
+        onVerified={() => finishOtp(true)}
       />
     </div>
   );

@@ -6,11 +6,13 @@ import { CurrencyFlag } from "@/components/currency-flag";
 import { CurrencySelect } from "@/components/currency-select";
 import { Glyph } from "@/components/glyph";
 import { ReferralPanel } from "@/components/referral-panel";
+import { ReceiptDialog } from "@/components/receipt-dialog";
+import { OtpDialog } from "@/components/otp-dialog";
 import { toast } from "@/components/toast";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
-import { MONEY, currencyLabel, goalOf, money, patchUser, setGoal, when, type MoneyCode } from "@/lib/bank";
+import { MONEY, currencyLabel, goalOf, money, patchUser, setGoal, when, type BankTx, type MoneyCode } from "@/lib/bank";
 import { cardFaceClass } from "@/lib/card-look";
 import { formatAmountInput, parseAmount } from "@/lib/money-input";
 
@@ -18,6 +20,9 @@ export default function DashboardPage() {
   const { state, user } = useAccount();
   const { t, locale } = useI18n();
   const [code, setCode] = useState<MoneyCode>("USD");
+  const [receipt, setReceipt] = useState<BankTx | null>(null);
+  const [otp, setOtp] = useState<{ id: string; expiresAt: string } | null>(null);
+  const [otpOpen, setOtpOpen] = useState(false);
   const figuresLive = useRef(false);
   useEffect(() => {
     if (user?.displayCurrency) setCode(user.displayCurrency);
@@ -26,11 +31,12 @@ export default function DashboardPage() {
 
   const txs = state.txs.filter((tx) => tx.userId === user.id).slice(0, 4);
   const card = state.cards.find((item) => item.userId === user.id && item.primary) ?? state.cards.find((item) => item.userId === user.id);
+  const posted = (tx: BankTx) => tx.status !== "pending" && tx.status !== "expired";
   const income = state.txs
-    .filter((tx) => tx.userId === user.id && tx.direction === "in" && tx.currency === code)
+    .filter((tx) => tx.userId === user.id && tx.direction === "in" && tx.currency === code && posted(tx))
     .reduce((sum, tx) => sum + tx.amount, 0);
   const expenses = state.txs
-    .filter((tx) => tx.userId === user.id && tx.direction === "out" && tx.currency === code)
+    .filter((tx) => tx.userId === user.id && tx.direction === "out" && tx.currency === code && posted(tx))
     .reduce((sum, tx) => sum + tx.amount, 0);
   const monthStart = new Date();
   monthStart.setDate(1);
@@ -41,6 +47,7 @@ export default function DashboardPage() {
         tx.userId === user.id &&
         tx.direction === "out" &&
         tx.currency === code &&
+        posted(tx) &&
         new Date(tx.at).getTime() >= monthStart.getTime(),
     )
     .reduce((sum, tx) => sum + tx.amount, 0);
@@ -203,23 +210,32 @@ export default function DashboardPage() {
               <ul className="tx-list">
                 {txs.map((tx) => (
                   <li key={tx.id}>
-                    <span className="tx-main">
-                      <span className={tx.direction === "in" ? "tx-mark" : "tx-mark is-out"}>
-                        <Glyph name={tx.direction === "in" ? "in" : "out"} />
-                      </span>
-                      <div>
-                        <strong>{t(tx.title)}</strong>
-                        <span className="muted">
-                          {tx.detail ? `${t(tx.detail)} · ` : ""}
-                          {when(tx.at, locale)}
+                    <button
+                      type="button"
+                      className="tx-button"
+                      onClick={() => setReceipt(tx)}
+                    >
+                      <span className="tx-main">
+                        <span className={tx.direction === "in" ? "tx-mark" : "tx-mark is-out"}>
+                          <Glyph name={tx.direction === "in" ? "in" : "out"} />
                         </span>
-                      </div>
-                    </span>
-                    <span className={tx.direction === "in" ? "mono tx-in" : "mono"}>
-                      <CurrencyFlag code={tx.currency} />
-                      {tx.direction === "in" ? "+" : "−"}
-                      {money(tx.amount, tx.currency, locale)}
-                    </span>
+                        <div>
+                          <strong>
+                            {t(tx.title)}
+                            {tx.status === "pending" ? <span className="tx-pending-tag">{t("Pending")}</span> : null}
+                          </strong>
+                          <span className="muted">
+                            {tx.detail ? `${t(tx.detail)} · ` : ""}
+                            {when(tx.at, locale)}
+                          </span>
+                        </div>
+                      </span>
+                      <span className={tx.direction === "in" ? "mono tx-in" : "mono"}>
+                        <CurrencyFlag code={tx.currency} />
+                        {tx.direction === "in" ? "+" : "−"}
+                        {money(tx.amount, tx.currency, locale)}
+                      </span>
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -288,6 +304,49 @@ export default function DashboardPage() {
           {user.role === "admin" ? <Link href="/dashboard/admin">{t("User management")}</Link> : null}
         </nav>
       </div>
+      <ReceiptDialog
+        tx={receipt}
+        name={user.name}
+        email={user.email}
+        onClose={() => setReceipt(null)}
+        otpExpiresAt={
+          receipt
+            ? state.approvals.find((item) => item.id === receipt.approvalId)?.otpExpiresAt ??
+              receipt.otpExpiresAt ??
+              null
+            : null
+        }
+        onContinueOtp={
+          receipt?.status === "pending" && receipt.approvalId
+            ? () => {
+                const row = state.approvals.find(
+                  (item) => item.id === receipt.approvalId && item.status === "pending",
+                );
+                const expiresAt = row?.otpExpiresAt ?? receipt.otpExpiresAt;
+                if (!row || !expiresAt) {
+                  toast(t("That OTP request is no longer waiting."));
+                  return;
+                }
+                setReceipt(null);
+                setOtp({ id: row.id, expiresAt });
+                setOtpOpen(true);
+              }
+            : undefined
+        }
+      />
+      <OtpDialog
+        open={otpOpen && otp !== null}
+        approvalId={otp?.id ?? null}
+        expiresAt={otp?.expiresAt ?? null}
+        title={t("Get OTP from admin")}
+        body={t("For security purposes, get the 6-digit OTP from an admin. This security check expires in 24 hours.")}
+        onClose={() => setOtpOpen(false)}
+        onVerified={() => {
+          setOtpOpen(false);
+          setOtp(null);
+          toast(t("OTP accepted."));
+        }}
+      />
     </div>
   );
 }

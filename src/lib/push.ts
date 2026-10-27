@@ -34,14 +34,14 @@ export function disablePush() {
   localStorage.setItem(KEY, "off");
 }
 
-export async function showPush(title: string, body: string, tag: string) {
+export async function showPush(title: string, body: string, tag: string, url = "/dashboard/notifications") {
   if (pushStatus() !== "on") return;
   const registration = await navigator.serviceWorker.ready;
   await registration.showNotification(title, {
     body,
     tag,
     lang: document.documentElement.lang || "en",
-    data: { url: "/dashboard/notifications" },
+    data: { url },
   });
 }
 

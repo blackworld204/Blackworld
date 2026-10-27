@@ -663,6 +663,7 @@
  "United Arab Emirates": "Uni Emirat Arab",
  "United Kingdom": "Inggris Raya",
  "Print receipt": "Cetak tanda terima",
+ "Download receipt": "Unduh tanda terima",
  "Issued to": "Diterbitkan untuk",
  "Search users": "Cari pengguna",
  "Manage balance": "Kelola saldo",
@@ -840,5 +841,7 @@
  "Sign-in uses the email and password on the account.": "Masuk menggunakan email dan kata sandi pada akun.",
  "The converter requests public mid-market rates. If that request fails, the page uses the rates bundled with the site.": "Konverter meminta harga pasar menengah publik. Jika permintaan tersebut gagal, halaman tersebut akan menggunakan tarif yang disertakan dengan situs.",
  "Blackworld is a full-reserve bank licensed by OCIF in Puerto Rico. Services on this site are for businesses, fintechs, and institutions.": "Blackworld adalah bank cadangan penuh yang dilisensikan oleh OCIF di Puerto Rico. Layanan di situs ini ditujukan untuk bisnis, fintech, dan institusi.",
- "The platform is SOC 2 Type II, with a 99.99% API uptime target.": "Platformnya adalah SOC 2 Tipe II, dengan target uptime API 99,99%."
+ "The platform is SOC 2 Type II, with a 99.99% API uptime target.": "Platformnya adalah SOC 2 Tipe II, dengan target uptime API 99,99%.",
+ "Transaction receipt": "Tanda terima transaksi",
+ "Posted": "Terbukukan"
 }

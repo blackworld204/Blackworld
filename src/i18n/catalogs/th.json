@@ -663,6 +663,7 @@
  "United Arab Emirates": "สหรัฐอาหรับเอมิเรตส์",
  "United Kingdom": "สหราชอาณาจักร",
  "Print receipt": "พิมพ์ใบเสร็จ",
+ "Download receipt": "ดาวน์โหลดใบเสร็จ",
  "Issued to": "ออกให้",
  "Search users": "ค้นหาผู้ใช้",
  "Manage balance": "จัดการยอดคงเหลือ",
@@ -840,5 +841,7 @@
  "Sign-in uses the email and password on the account.": "การลงชื่อเข้าใช้จะใช้อีเมลและรหัสผ่านในบัญชี",
  "The converter requests public mid-market rates. If that request fails, the page uses the rates bundled with the site.": "ตัวแปลงสัญญาณขออัตราตลาดกลางสาธารณะ หากคำขอนั้นล้มเหลว หน้าจะใช้ราคาที่รวมอยู่ในเว็บไซต์",
  "Blackworld is a full-reserve bank licensed by OCIF in Puerto Rico. Services on this site are for businesses, fintechs, and institutions.": "Blackworld เป็นธนาคารสำรองเต็มรูปแบบที่ได้รับอนุญาตจาก OCIF ในเปอร์โตริโก บริการบนเว็บไซต์นี้มีไว้สำหรับธุรกิจ ฟินเทค และสถาบัน",
- "The platform is SOC 2 Type II, with a 99.99% API uptime target.": "แพลตฟอร์มดังกล่าวเป็น SOC 2 Type II โดยมีเป้าหมายความพร้อมในการทำงาน API 99.99%"
+ "The platform is SOC 2 Type II, with a 99.99% API uptime target.": "แพลตฟอร์มดังกล่าวเป็น SOC 2 Type II โดยมีเป้าหมายความพร้อมในการทำงาน API 99.99%",
+ "Transaction receipt": "ใบเสร็จธุรกรรม",
+ "Posted": "บันทึกแล้ว"
 }

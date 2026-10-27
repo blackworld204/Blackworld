@@ -47,7 +47,11 @@ export function scopeDesk(state: BankState, email: string | null): BankState {
     payees: own(state.payees),
     referrals: own(state.referrals),
     schedules: own(state.schedules),
-    approvals: own(state.approvals),
+    approvals: own(state.approvals).map((row) => {
+      const next = { ...row };
+      delete next.otpCode;
+      return next;
+    }),
     events: own(state.events),
   };
 }

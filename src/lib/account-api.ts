@@ -2,8 +2,9 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import {
   alertsOf,
   depositBreakdown,
-  needsApproval,
   normalizeBank,
+  OTP_TTL_MS,
+  otpExpired,
   payReferralOnDeposit,
   transferFee,
   type BankApproval,
@@ -168,10 +169,13 @@ function pay(
   const rounded = money(currency, amount);
   const fee = transferFee(rounded);
   const at = new Date().toISOString();
-  if (!options?.force && needsApproval(user, rounded + fee)) {
-    const row: BankApproval = {
-      id: nid("apr"),
-      userId: user.id,
+  const detail = `${holder} · ${bank}${note ? ` · ${note}` : ""}`;
+  if (!options?.force) {
+    const balance = user.balances[currency] ?? 0;
+    if (balance < rounded + fee - 0.001)
+      return { error: "Not enough balance.", status: 422 };
+    return queueOtp(state, user, {
+      kind: "transfer",
       holder,
       bank,
       routing,
@@ -181,46 +185,20 @@ function pay(
       amount: rounded,
       currency,
       fee,
-      status: "pending",
-      at,
       ref: reference || undefined,
-    };
-    const body = `${holder} · ${currency} ${rounded.toFixed(2)}`;
-    const waiting = eventFor(user.id, "Approval waiting", body, at);
-    const recipients = new Set<string>([
-      user.id,
-      ...state.users
-        .filter((item) => item.role === "admin")
-        .map((item) => item.id),
-    ]);
-    const notes: BankNote[] = [...recipients].map((userId) => ({
-      id: nid("note"),
-      userId,
-      title: "Approval waiting",
-      body,
+      title: "Transfer",
+      detail,
+      direction: "out",
       at,
-      read: false,
-    }));
-    const next = pushEvent(
-      {
-        ...state,
-        approvals: [row, ...state.approvals],
-        notes: [...notes, ...state.notes],
-      },
-      waiting,
-    );
-    return {
-      state: next,
-      eventIds: [waiting.id],
-      value: { id: row.id, status: "pending", amount: rounded, fee, currency },
-    };
+    });
   }
   const moved = debit(state, user.id, currency, rounded, {
     title: "Transfer",
-    detail: `${holder} · ${bank}${note ? ` · ${note}` : ""}`,
+    detail,
     amount: rounded,
     direction: "out",
     ref: reference || undefined,
+    status: "posted",
   });
   if ("error" in moved) return moved;
   if (fee <= 0)
@@ -240,6 +218,7 @@ function pay(
     detail: "1% of the transfer",
     amount: fee,
     direction: "out",
+    status: "posted",
   });
   if ("error" in charged) return charged;
   return {
@@ -251,6 +230,123 @@ function pay(
       amount: rounded,
       fee,
       currency,
+    },
+  };
+}
+
+function queueOtp(
+  state: BankState,
+  user: BankUser,
+  input: {
+    kind: "transfer" | "deposit" | "card" | "exchange";
+    holder: string;
+    bank: string;
+    routing: string;
+    swift: string;
+    account: string;
+    note: string;
+    amount: number;
+    currency: BankApproval["currency"];
+    fee: number;
+    ref?: string;
+    title: string;
+    detail: string;
+    direction: "in" | "out";
+    at: string;
+    cardExpiry?: string;
+    cardKind?: "virtual" | "physical";
+    cardPrimary?: boolean;
+    exchangeTo?: BankApproval["exchangeTo"];
+    exchangeConverted?: number;
+    exchangeRate?: number;
+  },
+) {
+  const approvalId = nid("apr");
+  const txId = nid("tx");
+  const expiresAt = new Date(Date.parse(input.at) + OTP_TTL_MS).toISOString();
+  const tx: BankTx = {
+    id: txId,
+    userId: user.id,
+    title: input.title,
+    detail: input.detail,
+    amount: input.kind === "deposit" ? Math.max(0, input.amount - input.fee) : input.amount,
+    currency: input.currency,
+    direction: input.direction,
+    at: input.at,
+    ref: input.ref,
+    status: "pending",
+    approvalId,
+    otpExpiresAt: expiresAt,
+  };
+  const row: BankApproval = {
+    id: approvalId,
+    userId: user.id,
+    holder: input.holder,
+    bank: input.bank,
+    routing: input.routing,
+    swift: input.swift,
+    account: input.account,
+    note: input.note,
+    amount: input.amount,
+    currency: input.currency,
+    fee: input.fee,
+    status: "pending",
+    at: input.at,
+    ref: input.ref,
+    kind: input.kind,
+    otpExpiresAt: expiresAt,
+    txId,
+    cardExpiry: input.cardExpiry,
+    cardKind: input.cardKind,
+    cardPrimary: input.cardPrimary,
+    exchangeTo: input.exchangeTo,
+    exchangeConverted: input.exchangeConverted,
+    exchangeRate: input.exchangeRate,
+  };
+  const body = `${input.holder} · ${input.currency} ${input.amount.toFixed(2)}`;
+  const title =
+    input.kind === "deposit"
+      ? "Deposit waiting"
+      : input.kind === "card"
+        ? "Card waiting"
+        : input.kind === "exchange"
+          ? "Exchange waiting"
+          : "OTP waiting";
+  const waiting = eventFor(user.id, title, body, input.at);
+  const recipients = new Set<string>([
+    user.id,
+    ...state.users.filter((item) => item.role === "admin").map((item) => item.id),
+  ]);
+  const notes: BankNote[] = [...recipients].map((userId) => ({
+    id: nid("note"),
+    userId,
+    title,
+    body: `${body}. For security purposes, get the 6-digit OTP from an admin within 24 hours.`,
+    at: input.at,
+    read: false,
+    channel: "security",
+    txId,
+    ...(userId !== user.id ? { relatedUserId: user.id } : {}),
+  }));
+  return {
+    state: pushEvent(
+      {
+        ...state,
+        txs: [tx, ...state.txs],
+        approvals: [row, ...state.approvals],
+        notes: [...notes, ...state.notes],
+      },
+      waiting,
+    ),
+    eventIds: [waiting.id],
+    value: {
+      id: row.id,
+      txId,
+      status: "pending",
+      amount: tx.amount,
+      fee: input.fee,
+      currency: input.currency,
+      expiresAt,
     },
   };
 }
@@ -279,6 +375,7 @@ function debit(
     at,
     read: false,
     channel: "transfer",
+    txId: record.id,
   };
   return {
     eventId: event.id,
@@ -326,6 +423,7 @@ function credit(
     at,
     read: false,
     channel: "transfer",
+    txId: record.id,
   };
   return {
     eventId: event.id,
@@ -373,13 +471,15 @@ function deposit(
       status: 422,
     };
   }
-  const { fee, credit: received } = depositBreakdown(amount);
+  const { fee } = depositBreakdown(amount);
   const at = new Date().toISOString();
   const holder = method === "wire" ? "Wire deposit" : "Card deposit";
-  const detail = method === "wire" ? `Fee USD ${fee.toFixed(2)}` : `Card •••• ${card?.last4 ?? ""} · fee USD ${fee.toFixed(2)}`;
-  const row: BankApproval = {
-    id: nid("apr"),
-    userId: user.id,
+  const detail =
+    method === "wire"
+      ? `Fee USD ${fee.toFixed(2)}`
+      : `Card •••• ${card?.last4 ?? ""} · fee USD ${fee.toFixed(2)}`;
+  return queueOtp(state, user, {
+    kind: "deposit",
     holder,
     bank: "Blackworld",
     routing: "",
@@ -389,26 +489,11 @@ function deposit(
     amount,
     currency: "USD",
     fee,
-    status: "pending",
+    title: holder,
+    detail,
+    direction: "in",
     at,
-    kind: "deposit",
-  };
-  const body = `${holder} · USD ${amount.toFixed(2)}`;
-  const waiting = eventFor(user.id, "Deposit waiting", body, at);
-  const recipients = new Set<string>([user.id, ...state.users.filter((item) => item.role === "admin").map((item) => item.id)]);
-  const notes: BankNote[] = [...recipients].map((userId) => ({
-    id: nid("note"),
-    userId,
-    title: "Deposit waiting",
-    body,
-    at,
-    read: false,
-  }));
-  return {
-    state: pushEvent({ ...state, approvals: [row, ...state.approvals], notes: [...notes, ...state.notes] }, waiting),
-    eventIds: [waiting.id],
-    value: { status: "pending", amount: received, fee, currency: "USD" },
-  };
+  });
 }
 
 function overCardSpend(
@@ -473,6 +558,7 @@ function exchange(
   user: BankUser,
   input: Record<string, unknown>,
   book: RateBook,
+  options?: { force?: boolean },
 ) {
   const from = text(input.from, 8).toUpperCase();
   const to = text(input.to, 8).toUpperCase();
@@ -489,11 +575,36 @@ function exchange(
     return { error: "Rates are not available.", status: 502 };
   const over = overCardSpend(state, user.id, from, quoted.amount);
   if (over) return { error: over, status: 422 };
+  const at = new Date().toISOString();
+  if (!options?.force) {
+    if ((user.balances[from] ?? 0) < quoted.amount - 0.001)
+      return { error: "Not enough balance.", status: 422 };
+    return queueOtp(state, user, {
+      kind: "exchange",
+      holder: `${from} → ${to}`,
+      bank: "Exchange",
+      routing: "",
+      swift: "",
+      account: to,
+      note: `Rate ${quoted.rate.toFixed(6)}`,
+      amount: quoted.amount,
+      currency: from,
+      fee: quoted.fee,
+      title: "Exchange",
+      detail: `${from} to ${to} · fee ${quoted.fee.toFixed(2)}`,
+      direction: "out",
+      at,
+      exchangeTo: to,
+      exchangeConverted: quoted.converted,
+      exchangeRate: quoted.rate,
+    });
+  }
   const out = debit(state, user.id, from, quoted.amount, {
     title: "Exchange out",
     detail: `${from} to ${to} · fee ${quoted.fee.toFixed(2)}`,
     amount: quoted.amount,
     direction: "out",
+    status: "posted",
   });
   if ("error" in out) return out;
   const inn = credit(out.state, user.id, to, quoted.converted, {
@@ -501,6 +612,7 @@ function exchange(
     detail: `${from} to ${to}`,
     amount: quoted.converted,
     direction: "in",
+    status: "posted",
   });
   if ("error" in inn) return inn;
   return {
@@ -518,6 +630,136 @@ function exchange(
   };
 }
 
+function markApproval(
+  state: BankState,
+  approvalId: string,
+  status: BankApproval["status"],
+  txStatus?: BankTx["status"],
+) {
+  const row = state.approvals.find((item) => item.id === approvalId);
+  return {
+    ...state,
+    approvals: state.approvals.map((item) =>
+      item.id === approvalId ? { ...item, status } : item,
+    ),
+    txs: state.txs.map((item) =>
+      row?.txId && item.id === row.txId
+        ? { ...item, status: txStatus ?? item.status }
+        : item,
+    ),
+  };
+}
+
+function dropPendingTx(state: BankState, txId: string | undefined) {
+  if (!txId) return state;
+  return { ...state, txs: state.txs.filter((item) => item.id !== txId) };
+}
+
+function completeApproval(
+  state: BankState,
+  row: BankApproval,
+  options?: { otpVerified?: boolean },
+) {
+  // Money / card changes only after the member enters the OTP an admin created.
+  if (!options?.otpVerified) {
+    return { error: "OTP verification is required before this can finish.", status: 403 };
+  }
+  const payer = state.users.find((item) => item.id === row.userId);
+  if (!payer || payer.status !== "active")
+    return { error: "Account not found.", status: 404 };
+  if (row.kind === "exchange") {
+    const to = row.exchangeTo;
+    const converted = row.exchangeConverted;
+    const rate = row.exchangeRate;
+    if (!to || !isMoneyCode(to) || typeof converted !== "number" || typeof rate !== "number") {
+      return { error: "That exchange request is incomplete.", status: 422 };
+    }
+    const without = dropPendingTx(state, row.txId);
+    const out = debit(without, row.userId, row.currency, row.amount, {
+      title: "Exchange out",
+      detail: `${row.currency} to ${to} · fee ${row.fee.toFixed(2)}`,
+      amount: row.amount,
+      direction: "out",
+      status: "posted",
+    });
+    if ("error" in out) return out;
+    const inn = credit(out.state, row.userId, to, converted, {
+      title: "Exchange in",
+      detail: `${row.currency} to ${to}`,
+      amount: converted,
+      direction: "in",
+      status: "posted",
+    });
+    if ("error" in inn) return inn;
+    return {
+      state: markApproval(inn.state, row.id, "approved"),
+      eventIds: [out.eventId, inn.eventId],
+      value: {
+        id: row.id,
+        status: "approved",
+        from: row.currency,
+        to,
+        amount: row.amount,
+        fee: row.fee,
+        converted,
+        rate,
+      },
+    };
+  }
+  if (row.kind === "card") {
+    const cleared = dropPendingTx(state, row.txId);
+    const issued = issueCard(
+      cleared,
+      payer,
+      {
+        holder: row.holder,
+        last4: row.account,
+        expiry: row.cardExpiry,
+        kind: row.cardKind,
+        primary: row.cardPrimary,
+      },
+      { force: true },
+    );
+    if ("error" in issued) return issued;
+    if (!("state" in issued) || !issued.state)
+      return { value: { id: row.id, status: "approved" } };
+    return {
+      state: markApproval(issued.state, row.id, "approved"),
+      eventIds: issued.eventIds,
+      value: { id: row.id, status: "approved", ...(issued.value as object) },
+    };
+  }
+  if (row.kind === "deposit") {
+    const net = Math.round((row.amount - row.fee) * 100) / 100;
+    const without = dropPendingTx(state, row.txId);
+    const credited = credit(without, row.userId, "USD", net, {
+      title: row.holder,
+      detail: row.note || `Fee USD ${row.fee.toFixed(2)}`,
+      amount: net,
+      direction: "in",
+      status: "posted",
+    });
+    if ("error" in credited) return credited;
+    const reward = payReferralOnDeposit(credited.state, payer);
+    const next = reward?.state ?? credited.state;
+    return {
+      state: markApproval(next, row.id, "approved"),
+      eventIds: reward ? [credited.eventId, reward.eventId] : [credited.eventId],
+      value: { id: row.id, status: "approved" },
+    };
+  }
+  const without = dropPendingTx(state, row.txId);
+  const paid = pay(without, payer, { ...row }, { force: true });
+  if ("error" in paid) return paid;
+  if (!("state" in paid) || !paid.state)
+    return { value: { id: row.id, status: "approved" } };
+  return {
+    state: markApproval(paid.state, row.id, "approved"),
+    eventIds: paid.eventIds,
+    value: { id: row.id, status: "approved" },
+  };
+}
+
 function decide(
   state: BankState,
   actor: BankUser,
@@ -529,118 +771,208 @@ function decide(
   const row = state.approvals.find((item) => item.id === approvalId);
   if (!row || row.status !== "pending")
     return { error: "That transfer is no longer waiting.", status: 422 };
+  if (otpExpired(row)) {
+    return {
+      state: markApproval(state, approvalId, "expired", "expired"),
+      eventIds: [] as string[],
+      status: 422,
+      value: { id: row.id, status: "expired", error: "That OTP request has expired." },
+    };
+  }
   if (!approve) {
     return {
-      state: {
-        ...state,
-        approvals: state.approvals.map((item) =>
-          item.id === approvalId
-            ? { ...item, status: "declined" as const }
-            : item,
-        ),
-      },
+      state: markApproval(state, approvalId, "declined", "expired"),
       eventIds: [] as string[],
       value: { id: row.id, status: "declined" },
     };
   }
-  const payer = state.users.find((item) => item.id === row.userId);
-  if (!payer || payer.status !== "active")
-    return { error: "Account not found.", status: 404 };
-  if (row.kind === "deposit") {
-    const net = Math.round((row.amount - row.fee) * 100) / 100;
-    const credited = credit(state, row.userId, "USD", net, {
-      title: row.holder,
-      detail: row.note || `Fee USD ${row.fee.toFixed(2)}`,
-      amount: net,
-      direction: "in",
-    });
-    if ("error" in credited) return credited;
-    const reward = payReferralOnDeposit(credited.state, payer);
-    const next = reward?.state ?? credited.state;
+  // Never move money from Approve. Admin creates an OTP; the member must enter it.
+  return {
+    error: row.otpCode
+      ? "The member must enter the admin OTP to finish this. Nothing has moved yet."
+      : "Create an OTP for this request first. Nothing moves until that OTP is verified.",
+    status: 422,
+  };
+}
+
+function issueOtp(state: BankState, actor: BankUser, approvalId: string) {
+  if (actor.role !== "admin")
+    return { error: "Only an admin can create an OTP.", status: 403 };
+  const row = state.approvals.find((item) => item.id === approvalId);
+  if (!row || row.status !== "pending")
+    return { error: "That request is no longer waiting.", status: 422 };
+  if (!row.otpExpiresAt) {
+    // Older approval rows: attach a fresh 24h OTP window.
+  }
+  if (otpExpired(row)) {
     return {
-      state: {
-        ...next,
-        approvals: next.approvals.map((item) =>
-          item.id === approvalId ? { ...item, status: "approved" as const } : item,
-        ),
-      },
-      eventIds: reward ? [credited.eventId, reward.eventId] : [credited.eventId],
-      value: { id: row.id, status: "approved" },
+      state: markApproval(state, approvalId, "expired", "expired"),
+      eventIds: [] as string[],
+      status: 422,
+      value: { id: row.id, status: "expired", error: "That OTP request has expired." },
     };
   }
-  const paid = pay(state, payer, { ...row }, { force: true });
-  if ("error" in paid) return paid;
-  if (!("state" in paid) || !paid.state)
-    return { value: { id: row.id, status: "approved" } };
-  return {
-    state: {
-      ...paid.state,
-      approvals: paid.state.approvals.map((item) =>
-        item.id === approvalId
-          ? { ...item, status: "approved" as const }
-          : item,
-      ),
-    },
-    eventIds: paid.eventIds,
-    value: { id: row.id, status: "approved" },
+  const code = String(100000 + (randomBytes(3).readUIntBE(0, 3) % 900000));
+  const at = new Date().toISOString();
+  const expiresAt = row.otpExpiresAt ?? new Date(Date.now() + OTP_TTL_MS).toISOString();
+  const next: BankState = {
+    ...state,
+    approvals: state.approvals.map((item) =>
+      item.id === approvalId
+        ? { ...item, otpCode: code, otpIssuedAt: at, otpExpiresAt: expiresAt }
+        : item,
+    ),
+    txs: state.txs.map((item) =>
+      row.txId && item.id === row.txId
+        ? { ...item, otpExpiresAt: expiresAt, approvalId: row.id, status: item.status ?? "pending" }
+        : item,
+    ),
   };
+  const event = eventFor(
+    row.userId,
+    "OTP ready",
+    `An admin created a 6-digit OTP for ${row.holder}.`,
+    at,
+  );
+  return {
+    state: pushEvent(next, event),
+    eventIds: [event.id],
+    value: { id: row.id, code, expiresAt },
+  };
+}
+
+function sameOtp(stored: string, given: string) {
+  if (!stored || stored.length !== given.length) return false;
+  try {
+    return timingSafeEqual(Buffer.from(stored), Buffer.from(given));
+  } catch {
+    return false;
+  }
+}
+
+function verifyOtp(
+  state: BankState,
+  actor: BankUser,
+  approvalId: string,
+  code: string,
+) {
+  const row = state.approvals.find((item) => item.id === approvalId);
+  if (!row || row.status !== "pending")
+    return { error: "That request is no longer waiting.", status: 422 };
+  if (row.userId !== actor.id && actor.role !== "admin")
+    return { error: "That request is not on this account.", status: 403 };
+  if (otpExpired(row)) {
+    return {
+      state: markApproval(state, approvalId, "expired", "expired"),
+      eventIds: [] as string[],
+      status: 422,
+      value: { id: row.id, status: "expired", error: "That OTP has expired." },
+    };
+  }
+  const digits = code.replace(/\s/g, "");
+  if (!/^\d{6}$/.test(digits))
+    return { error: "Enter the 6-digit OTP from an admin.", status: 422 };
+  // Only the OTP an admin generated for this request can release funds / finish the action.
+  if (!row.otpCode || !row.otpIssuedAt)
+    return { error: "An admin has not created an OTP yet. Nothing has moved.", status: 422 };
+  if (!sameOtp(row.otpCode, digits))
+    return { error: "That OTP does not match. Nothing has moved.", status: 422 };
+  const burned: BankState = {
+    ...state,
+    approvals: state.approvals.map((item) =>
+      item.id === approvalId
+        ? { ...item, otpCode: undefined, otpIssuedAt: item.otpIssuedAt }
+        : item,
+    ),
+  };
+  const nextRow = burned.approvals.find((item) => item.id === approvalId) ?? {
+    ...row,
+    otpCode: undefined,
+  };
+  return completeApproval(burned, nextRow, { otpVerified: true });
 }
 
 function issueCard(
   state: BankState,
   user: BankUser,
   input: Record<string, unknown>,
+  options?: { force?: boolean },
 ) {
-  const holder = text(input.holder, 80) || user.name;
+  const holder = (text(input.holder, 80) || user.name).toUpperCase();
   const kind = input.kind === "physical" ? "physical" : "virtual";
-  const spendLimit =
-    typeof input.spendLimit === "number" && input.spendLimit > 0
-      ? money("USD", input.spendLimit)
-      : undefined;
+  const last4 = text(input.last4, 4);
+  const expiry = text(input.expiry, 5);
+  const primary =
+    input.primary === true ||
+    !state.cards.some((item) => item.userId === user.id && item.primary);
   if (holder.length < 2)
     return { error: "Enter the name on the card.", status: 422 };
-  const used = new Set(
-    state.cards
-      .filter((card) => card.userId === user.id)
-      .map((card) => card.last4),
-  );
-  let last4 = "";
-  for (let attempt = 0; attempt < 30 && !last4; attempt += 1) {
-    const next = String((randomBytes(2).readUInt16BE(0) % 9000) + 1000);
-    if (!used.has(next)) last4 = next;
+  if (!/^\d{4}$/.test(last4))
+    return { error: "Enter the last 4 digits.", status: 422 };
+  if (!/^\d{2}\/\d{2}$/.test(expiry))
+    return { error: "Use expiry as MM/YY.", status: 422 };
+  const month = Number(expiry.slice(0, 2));
+  if (month < 1 || month > 12)
+    return { error: "Use expiry as MM/YY.", status: 422 };
+  if (
+    state.cards.some(
+      (card) => card.userId === user.id && card.last4 === last4,
+    )
+  ) {
+    return { error: "That card is already on this account.", status: 422 };
   }
-  if (!last4) return { error: "A card could not be issued.", status: 422 };
-  const expiryDate = new Date();
-  expiryDate.setFullYear(expiryDate.getFullYear() + 3);
   const at = new Date().toISOString();
+  if (!options?.force) {
+    return queueOtp(state, user, {
+      kind: "card",
+      holder,
+      bank: "Card",
+      routing: "",
+      swift: "",
+      account: last4,
+      note: `${kind} · ${expiry}`,
+      amount: 0,
+      currency: "USD",
+      fee: 0,
+      title: "Card",
+      detail: `•••• ${last4} · ${kind}`,
+      direction: "in",
+      at,
+      cardExpiry: expiry,
+      cardKind: kind,
+      cardPrimary: primary,
+    });
+  }
   const card: BankCard = {
     id: nid("card"),
     userId: user.id,
-    holder: holder.toUpperCase(),
+    holder,
     last4,
-    expiry: `${String(expiryDate.getMonth() + 1).padStart(2, "0")}/${String(expiryDate.getFullYear()).slice(-2)}`,
-    primary: !state.cards.some(
-      (item) => item.userId === user.id && item.primary,
-    ),
+    expiry,
+    primary,
     frozen: false,
     kind,
-    spendLimit,
   };
+  const cards = primary
+    ? state.cards.map((item) =>
+        item.userId === user.id ? { ...item, primary: false } : item,
+      )
+    : state.cards;
   const event = eventFor(
     user.id,
-    "Card issued",
+    "Card added",
     `${card.kind} · ${card.last4}`,
     at,
   );
   return {
-    state: pushEvent({ ...state, cards: [card, ...state.cards] }, event),
+    state: pushEvent({ ...state, cards: [card, ...cards] }, event),
     eventIds: [event.id],
     value: {
       id: card.id,
       last4: card.last4,
       expiry: card.expiry,
       kind: card.kind,
-      spendLimit: card.spendLimit ?? null,
+      status: "paid",
     },
   };
 }
@@ -696,6 +1028,7 @@ function openAccount(
       body: `${name} · ${email}`,
       at,
       read: false,
+      relatedUserId: user.id,
     }));
   const next = pushEvent(
     {
@@ -935,6 +1268,25 @@ export async function runAccountCall(call: Call): Promise<Reply> {
       const record = recordOf(call.body) ?? {};
       return done(
         decide(plain, user, call.path[1] ?? "", record.approve === true),
+      );
+    }
+    if (
+      method === "POST" &&
+      path[0] === "approvals" &&
+      path.length === 3 &&
+      path[2] === "otp"
+    ) {
+      return done(issueOtp(plain, user, call.path[1] ?? ""));
+    }
+    if (
+      method === "POST" &&
+      path[0] === "approvals" &&
+      path.length === 3 &&
+      path[2] === "verify"
+    ) {
+      const record = recordOf(call.body) ?? {};
+      return done(
+        verifyOtp(plain, user, call.path[1] ?? "", text(record.code, 8)),
       );
     }
     return done({ error: "Not found.", status: 404 });

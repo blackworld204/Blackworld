@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AccountPhoto } from "@/components/account-photo";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { CopyButton } from "@/components/copy-button";
 import { CurrencyFlag } from "@/components/currency-flag";
 import { DateSelect } from "@/components/date-select";
+import { OtpIssuedDialog } from "@/components/otp-issued-dialog";
+import { ReceiptDialog } from "@/components/receipt-dialog";
 import { toast } from "@/components/toast";
 import { useI18n } from "@/i18n/provider";
 import {
@@ -22,12 +25,14 @@ import {
   updateCard,
   when,
   type BankState,
+  type BankTx,
   type BankUser,
 } from "@/lib/bank";
 import { cardFaceClass } from "@/lib/card-look";
 import { listedCurrencies } from "@/lib/currencies";
 import { postAccount } from "@/lib/flow-api";
 import { formatAmountInput, parseAmount } from "@/lib/money-input";
+import { findTxForNote } from "@/lib/receipt";
 
 type Ask =
   | { kind: "freeze"; id: string; last4: string; frozen: boolean }
@@ -37,6 +42,7 @@ type Ask =
   | { kind: "schedule"; id: string; holder: string }
   | { kind: "payee"; id: string; holder: string }
   | { kind: "approval"; id: string; approve: boolean; holder: string; total: string }
+  | { kind: "otp"; id: string; holder: string; code: string }
   | { kind: "limit"; amount: string };
 
 const blankCard: {
@@ -53,6 +59,9 @@ export function AdminAccount({
   admin,
   subject,
   state,
+  focusNoteId = null,
+  focusApprovalId = null,
+  onFocusHandled,
   onBack,
   onCredit,
   onNotice,
@@ -64,6 +73,9 @@ export function AdminAccount({
   admin: BankUser;
   subject: BankUser;
   state: BankState;
+  focusNoteId?: string | null;
+  focusApprovalId?: string | null;
+  onFocusHandled?: () => void;
   onBack: () => void;
   onCredit: () => void;
   onNotice: () => void;
@@ -74,12 +86,45 @@ export function AdminAccount({
 }) {
   const { t, locale } = useI18n();
   const [ask, setAsk] = useState<Ask | null>(null);
+  const [receipt, setReceipt] = useState<BankTx | null>(null);
   const [cardForm, setCardForm] = useState(blankCard);
   const [cardError, setCardError] = useState("");
   const [limit, setLimit] = useState(String(subject.approvalLimit ?? 10000));
+  const [highlightNoteId, setHighlightNoteId] = useState<string | null>(null);
+  const [highlightApprovalId, setHighlightApprovalId] = useState<string | null>(null);
   useEffect(() => {
     setLimit(formatAmountInput(String(subject.approvalLimit ?? 10000)));
   }, [subject.id, subject.approvalLimit]);
+
+  const focusHandledRef = useRef(onFocusHandled);
+  focusHandledRef.current = onFocusHandled;
+
+  useEffect(() => {
+    if (!focusNoteId && !focusApprovalId) return;
+    const noteId = focusNoteId;
+    const approvalId = focusApprovalId;
+    const timer = window.setTimeout(() => {
+      const noteEl = noteId ? document.getElementById(`admin-note-${noteId}`) : null;
+      const approvalEl = approvalId ? document.getElementById(`admin-approval-${approvalId}`) : null;
+      const target = noteEl ?? approvalEl;
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+        if (noteId) setHighlightNoteId(noteId);
+        if (approvalId) setHighlightApprovalId(approvalId);
+      }
+      focusHandledRef.current?.();
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [subject.id, focusNoteId, focusApprovalId]);
+
+  useEffect(() => {
+    if (!highlightNoteId && !highlightApprovalId) return;
+    const timer = window.setTimeout(() => {
+      setHighlightNoteId(null);
+      setHighlightApprovalId(null);
+    }, 4200);
+    return () => window.clearTimeout(timer);
+  }, [highlightNoteId, highlightApprovalId]);
   const cards = state.cards.filter((item) => item.userId === subject.id);
   const txs = state.txs.filter((item) => item.userId === subject.id);
   const schedules = state.schedules.filter((item) => item.userId === subject.id);
@@ -194,6 +239,7 @@ export function AdminAccount({
       toast(t("Approval limit saved."));
       return;
     }
+    if (choice.kind === "otp") return;
     void postAccount("approvals/" + choice.id, { approve: choice.approve }).then((result) => {
       if (result.status === 404) {
         const failed = decideApproval(choice.id, admin.id, choice.approve);
@@ -441,17 +487,21 @@ export function AdminAccount({
         <ul className="tx-list">
           {txs.map((tx) => (
             <li key={tx.id}>
-              <div>
-                <strong>{t(tx.title)}</strong>
-                <span className="muted">
-                  {tx.detail} · {when(tx.at, locale)}
+              <button type="button" className="tx-button" onClick={() => setReceipt(tx)}>
+                <span className="tx-main">
+                  <div>
+                    <strong>{t(tx.title)}</strong>
+                    <span className="muted">
+                      {tx.detail} · {when(tx.at, locale)}
+                    </span>
+                  </div>
                 </span>
-              </div>
-              <span className={tx.direction === "in" ? "mono tx-in" : "mono"}>
-                <CurrencyFlag code={tx.currency} />
-                {tx.direction === "in" ? "+" : "−"}
-                {money(tx.amount, tx.currency, locale)}
-              </span>
+                <span className={tx.direction === "in" ? "mono tx-in" : "mono"}>
+                  <CurrencyFlag code={tx.currency} />
+                  {tx.direction === "in" ? "+" : "−"}
+                  {money(tx.amount, tx.currency, locale)}
+                </span>
+              </button>
             </li>
           ))}
         </ul>
@@ -485,30 +535,68 @@ export function AdminAccount({
         {approvals.length === 0 ? <p className="muted">{t("Nothing is waiting.")}</p> : null}
         <ul className="tx-list">
           {approvals.map((item) => (
-            <li key={item.id}>
+            <li
+              key={item.id}
+              id={`admin-approval-${item.id}`}
+              className={highlightApprovalId === item.id ? "admin-focus-target is-focused" : undefined}
+            >
               <div>
                 <strong>{item.holder}</strong>
                 <span className="muted">
-                  {t(item.status === "pending" ? "Pending" : item.status === "approved" ? "Approved" : "Declined")} · {when(item.at, locale)}
+                  {t(
+                    item.status === "pending"
+                      ? "Pending"
+                      : item.status === "approved"
+                        ? "Approved"
+                        : item.status === "expired"
+                          ? "Expired"
+                          : "Declined",
+                  )}{" "}
+                  · {when(item.at, locale)}
                 </span>
+                {item.otpCode ? (
+                  <span className="approval-otp-chip">
+                    <span className="muted">{t("OTP")}</span>
+                    <span className="mono approval-otp-value">{item.otpCode}</span>
+                    <CopyButton value={item.otpCode} label="Copy" />
+                  </span>
+                ) : null}
               </div>
-              <span className="mono">{money(item.kind === "deposit" ? Math.max(0, item.amount - item.fee) : item.amount + item.fee, item.currency, locale)}</span>
+              <span className="mono">
+                {money(
+                  item.kind === "card"
+                    ? 0
+                    : item.kind === "deposit"
+                      ? Math.max(0, item.amount - item.fee)
+                      : item.amount + item.fee,
+                  item.currency,
+                  locale,
+                )}
+              </span>
               {item.status === "pending" ? (
                 <div className="user-actions">
                   <button
                     type="button"
                     className="text-button"
-                    onClick={() =>
-                      setAsk({
-                        kind: "approval",
-                        id: item.id,
-                        approve: true,
-                        holder: item.holder,
-                        total: money(item.kind === "deposit" ? Math.max(0, item.amount - item.fee) : item.amount + item.fee, item.currency, locale),
-                      })
-                    }
+                    onClick={() => {
+                      void postAccount<{ code?: string; error?: string }>(`approvals/${item.id}/otp`, {}).then(
+                        (result) => {
+                          if (result.error) {
+                            toast(t(result.error));
+                            return;
+                          }
+                          const code = result.body?.code;
+                          if (!code) {
+                            toast(t(result.body?.error || "The request failed."));
+                            return;
+                          }
+                          setAsk({ kind: "otp", id: item.id, holder: item.holder, code });
+                          toast(t("OTP created."));
+                        },
+                      );
+                    }}
                   >
-                    {t("Approve")}
+                    {item.otpCode ? t("New OTP") : t("Create OTP")}
                   </button>
                   <button
                     type="button"
@@ -519,7 +607,11 @@ export function AdminAccount({
                         id: item.id,
                         approve: false,
                         holder: item.holder,
-                        total: money(item.kind === "deposit" ? Math.max(0, item.amount - item.fee) : item.amount + item.fee, item.currency, locale),
+                        total: money(
+                          item.kind === "deposit" ? Math.max(0, item.amount - item.fee) : item.amount + item.fee,
+                          item.currency,
+                          locale,
+                        ),
                       })
                     }
                   >
@@ -576,21 +668,48 @@ export function AdminAccount({
         <h3>{t("Notifications")}</h3>
         {notes.length === 0 ? <p className="muted">{t("No notifications.")}</p> : null}
         <ul className="tx-list">
-          {notes.map((item) => (
-            <li key={item.id}>
-              <div>
-                <strong>{item.title}</strong>
-                <span className="muted">
-                  {item.body} · {when(item.at, locale)}
-                </span>
-              </div>
-            </li>
-          ))}
+          {notes.map((item) => {
+            const linked = findTxForNote(state, item);
+            const focused = highlightNoteId === item.id;
+            return (
+              <li
+                key={item.id}
+                id={`admin-note-${item.id}`}
+                className={focused ? "admin-focus-target is-focused" : undefined}
+              >
+                {linked ? (
+                  <button type="button" className="tx-button" onClick={() => setReceipt(linked)}>
+                    <span className="tx-main">
+                      <div>
+                        <strong>{item.title}</strong>
+                        <span className="muted">
+                          {item.body} · {when(item.at, locale)}
+                        </span>
+                      </div>
+                    </span>
+                  </button>
+                ) : (
+                  <div>
+                    <strong>{item.title}</strong>
+                    <span className="muted">
+                      {item.body} · {when(item.at, locale)}
+                    </span>
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       </section>
 
+      <OtpIssuedDialog
+        open={ask?.kind === "otp"}
+        holder={ask?.kind === "otp" ? ask.holder : ""}
+        code={ask?.kind === "otp" ? ask.code : ""}
+        onClose={() => setAsk(null)}
+      />
       <ConfirmDialog
-        open={ask !== null}
+        open={ask !== null && ask.kind !== "otp"}
         title={
           ask?.kind === "freeze"
             ? ask.frozen
@@ -660,6 +779,12 @@ export function AdminAccount({
         }
         onClose={() => setAsk(null)}
         onConfirm={apply}
+      />
+      <ReceiptDialog
+        tx={receipt}
+        name={subject.name}
+        email={subject.email}
+        onClose={() => setReceipt(null)}
       />
     </div>
   );

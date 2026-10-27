@@ -18,6 +18,7 @@ import {
   registerPushWorker,
   showPush,
 } from "@/lib/push";
+import { noteOpenHref } from "@/lib/receipt";
 
 export function PushBridge() {
   const { session } = useSession();
@@ -53,7 +54,12 @@ export function PushBridge() {
       const alerts = user ? alertsOf(user) : null;
       for (const note of fresh) {
         if (alerts && !noteAllowsPush(note, alerts)) continue;
-        showPush(t(note.title), t(note.body), note.id).catch(() => undefined);
+        showPush(
+          t(note.title),
+          t(note.body),
+          note.id,
+          noteOpenHref(state, note, { id: user.id, role: user.role }),
+        ).catch(() => undefined);
       }
     };
     read();

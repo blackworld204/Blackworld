@@ -4,10 +4,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DateSelect } from "@/components/date-select";
 import { CurrencyFlag } from "@/components/currency-flag";
+import { OtpDialog } from "@/components/otp-dialog";
+import { ReceiptDialog } from "@/components/receipt-dialog";
+import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
 import { downloadCsv } from "@/lib/csv";
-import { currencyLabel, localeTag, money, privacyOf, when } from "@/lib/bank";
+import { currencyLabel, localeTag, money, privacyOf, when, type BankTx } from "@/lib/bank";
 import { listedCurrencies } from "@/lib/currencies";
 
 function dayKey(value: string | Date) {
@@ -29,6 +32,9 @@ export default function StatementPage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [askExport, setAskExport] = useState(false);
+  const [receipt, setReceipt] = useState<BankTx | null>(null);
+  const [otp, setOtp] = useState<{ id: string; expiresAt: string } | null>(null);
+  const [otpOpen, setOtpOpen] = useState(false);
   const seeded = useRef(false);
 
   useEffect(() => {
@@ -105,16 +111,20 @@ export default function StatementPage() {
         <ul className="tx-list">
           {txs.map((tx) => (
             <li key={tx.id}>
-              <div>
-                <strong>{t(tx.title)}</strong>
-                <span className="muted">
-                  {t(tx.detail)} · {when(tx.at, locale)}
+              <button type="button" className="tx-button" onClick={() => setReceipt(tx)}>
+                <span className="tx-main">
+                  <div>
+                    <strong>{t(tx.title)}</strong>
+                    <span className="muted">
+                      {t(tx.detail)} · {when(tx.at, locale)}
+                    </span>
+                  </div>
                 </span>
-              </div>
-              <span className="mono">
-                {tx.direction === "in" ? "+" : "−"}
-                {money(tx.amount, tx.currency, locale)}
-              </span>
+                <span className="mono">
+                  {tx.direction === "in" ? "+" : "−"}
+                  {money(tx.amount, tx.currency, locale)}
+                </span>
+              </button>
             </li>
           ))}
         </ul>
@@ -147,6 +157,49 @@ export default function StatementPage() {
             ["Date", "Title", "Detail", "Direction", "Currency", "Amount"],
             ...txs.map((tx) => [tx.at, tx.title, tx.detail, tx.direction, tx.currency, String(tx.amount)]),
           ]);
+        }}
+      />
+      <ReceiptDialog
+        tx={receipt}
+        name={user.name}
+        email={user.email}
+        onClose={() => setReceipt(null)}
+        otpExpiresAt={
+          receipt && state
+            ? state.approvals.find((item) => item.id === receipt.approvalId)?.otpExpiresAt ??
+              receipt.otpExpiresAt ??
+              null
+            : null
+        }
+        onContinueOtp={
+          receipt?.status === "pending" && receipt.approvalId && state
+            ? () => {
+                const row = state.approvals.find(
+                  (item) => item.id === receipt.approvalId && item.status === "pending",
+                );
+                const expiresAt = row?.otpExpiresAt ?? receipt.otpExpiresAt;
+                if (!row || !expiresAt) {
+                  toast(t("That OTP request is no longer waiting."));
+                  return;
+                }
+                setReceipt(null);
+                setOtp({ id: row.id, expiresAt });
+                setOtpOpen(true);
+              }
+            : undefined
+        }
+      />
+      <OtpDialog
+        open={otpOpen && otp !== null}
+        approvalId={otp?.id ?? null}
+        expiresAt={otp?.expiresAt ?? null}
+        title={t("Get OTP from admin")}
+        body={t("For security purposes, get the 6-digit OTP from an admin. This security check expires in 24 hours.")}
+        onClose={() => setOtpOpen(false)}
+        onVerified={() => {
+          setOtpOpen(false);
+          setOtp(null);
+          toast(t("OTP accepted."));
         }}
       />
     </div>

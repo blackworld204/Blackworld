@@ -663,6 +663,7 @@
  "United Arab Emirates": "Объединённые Арабские Эмираты",
  "United Kingdom": "Великобритания",
  "Print receipt": "Печать квитанции",
+ "Download receipt": "Скачать квитанцию",
  "Issued to": "Выдано",
  "Search users": "Искать пользователей",
  "Manage balance": "Управлять балансом",
@@ -840,5 +841,7 @@
  "Sign-in uses the email and password on the account.": "Для входа используется адрес электронной почты и пароль учетной записи.",
  "The converter requests public mid-market rates. If that request fails, the page uses the rates bundled with the site.": "Конвертер запрашивает публичные среднерыночные тарифы. Если этот запрос не удался, на странице используются тарифы, указанные на сайте.",
  "Blackworld is a full-reserve bank licensed by OCIF in Puerto Rico. Services on this site are for businesses, fintechs, and institutions.": "Blackworld — это банк с полным резервом, имеющий лицензию OCIF в Пуэрто-Рико. Услуги на этом сайте предназначены для предприятий, финтех-компаний и учреждений.",
- "The platform is SOC 2 Type II, with a 99.99% API uptime target.": "Платформа представляет собой SOC 2 Type II с целевым временем безотказной работы API 99,99%."
+ "The platform is SOC 2 Type II, with a 99.99% API uptime target.": "Платформа представляет собой SOC 2 Type II с целевым временем безотказной работы API 99,99%.",
+ "Transaction receipt": "Квитанция по операции",
+ "Posted": "Проведено"
 }

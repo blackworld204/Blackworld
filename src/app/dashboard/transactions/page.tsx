@@ -1,23 +1,31 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { CurrencyFlag } from "@/components/currency-flag";
 import { CurrencySelect } from "@/components/currency-select";
 import { Glyph } from "@/components/glyph";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { OtpDialog } from "@/components/otp-dialog";
+import { ReceiptSheet } from "@/components/receipt-sheet";
+import { toast } from "@/components/toast";
 import { useAccount } from "@/components/use-account";
 import { useI18n } from "@/i18n/provider";
 import { downloadCsv } from "@/lib/csv";
-import { MONEY, currencyLabel, localeTag, money, when, type BankTx, type MoneyCode } from "@/lib/bank";
+import { MONEY, currencyLabel, money, when, type MoneyCode } from "@/lib/bank";
 
-export default function TransactionsPage() {
+function TransactionsView() {
   const { state, user } = useAccount();
   const { t, locale } = useI18n();
+  const search = useSearchParams();
+  const requested = search.get("tx");
   const [query, setQuery] = useState("");
   const [askExport, setAskExport] = useState(false);
   const [direction, setDirection] = useState<"all" | "in" | "out">("all");
   const [currency, setCurrency] = useState<"all" | MoneyCode>("all");
-  const [open, setOpen] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<Record<string, true>>({});
+  const [otp, setOtp] = useState<{ id: string; expiresAt: string } | null>(null);
+  const [otpOpen, setOtpOpen] = useState(false);
   const currencyOptions = useMemo(
     () => [
       { code: "all", label: t("All currencies") },
@@ -40,6 +48,22 @@ export default function TransactionsPage() {
         (!q || tx.title.toLowerCase().includes(q) || tx.detail.toLowerCase().includes(q)),
     );
   }, [state, user, query, direction, currency]);
+
+  useEffect(() => {
+    if (!requested || !user || !state) return;
+    const mine = state.txs.some((tx) => tx.id === requested && tx.userId === user.id);
+    if (!mine) return;
+    setCollapsed((prev) => {
+      if (!prev[requested]) return prev;
+      const next = { ...prev };
+      delete next[requested];
+      return next;
+    });
+    const timer = window.setTimeout(() => {
+      document.getElementById(`tx-${requested}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [requested, state, user]);
 
   if (!state || !user) return <div className="app-hold" />;
 
@@ -92,19 +116,31 @@ export default function TransactionsPage() {
       {rows.length === 0 ? <p className="muted">{t("No transactions found.")}</p> : null}
       <ul className="tx-list">
         {rows.map((tx) => (
-          <li key={tx.id}>
+          <li key={tx.id} id={`tx-${tx.id}`}>
             <button
               type="button"
               className="tx-button"
-              aria-expanded={open === tx.id}
-              onClick={() => setOpen(open === tx.id ? null : tx.id)}
+              aria-expanded={!collapsed[tx.id]}
+              onClick={() =>
+                setCollapsed((prev) => {
+                  if (prev[tx.id]) {
+                    const next = { ...prev };
+                    delete next[tx.id];
+                    return next;
+                  }
+                  return { ...prev, [tx.id]: true };
+                })
+              }
             >
               <span className="tx-main">
                 <span className={tx.direction === "in" ? "tx-mark" : "tx-mark is-out"}>
                   <Glyph name={tx.direction === "in" ? "in" : "out"} />
                 </span>
                 <div>
-                  <strong>{t(tx.title)}</strong>
+                  <strong>
+                    {t(tx.title)}
+                    {tx.status === "pending" ? <span className="tx-pending-tag">{t("Pending")}</span> : null}
+                  </strong>
                   <span className="muted">{when(tx.at, locale)}</span>
                 </div>
               </span>
@@ -114,8 +150,34 @@ export default function TransactionsPage() {
                 {money(tx.amount, tx.currency, locale)}
               </span>
             </button>
-            {open === tx.id ? (
-              <Receipt tx={tx} name={user.name} email={user.email} locale={locale} />
+            {!collapsed[tx.id] ? (
+              <ReceiptSheet
+                tx={tx}
+                name={user.name}
+                email={user.email}
+                locale={locale}
+                otpExpiresAt={
+                  state.approvals.find((item) => item.id === tx.approvalId)?.otpExpiresAt ??
+                  tx.otpExpiresAt ??
+                  null
+                }
+                onContinueOtp={
+                  tx.status === "pending" && tx.approvalId
+                    ? () => {
+                        const row = state.approvals.find(
+                          (item) => item.id === tx.approvalId && item.status === "pending",
+                        );
+                        const expiresAt = row?.otpExpiresAt ?? tx.otpExpiresAt;
+                        if (!row || !expiresAt) {
+                          toast(t("That OTP request is no longer waiting."));
+                          return;
+                        }
+                        setOtp({ id: row.id, expiresAt });
+                        setOtpOpen(true);
+                      }
+                    : undefined
+                }
+              />
             ) : null}
           </li>
         ))}
@@ -134,57 +196,27 @@ export default function TransactionsPage() {
           ]);
         }}
       />
+      <OtpDialog
+        open={otpOpen && otp !== null}
+        approvalId={otp?.id ?? null}
+        expiresAt={otp?.expiresAt ?? null}
+        title={t("Get OTP from admin")}
+        body={t("For security purposes, get the 6-digit OTP from an admin. This security check expires in 24 hours.")}
+        onClose={() => setOtpOpen(false)}
+        onVerified={() => {
+          setOtpOpen(false);
+          setOtp(null);
+          toast(t("OTP accepted."));
+        }}
+      />
     </div>
   );
 }
 
-function issuedAt(iso: string, locale: string) {
-  return new Intl.DateTimeFormat(localeTag(locale), {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(iso));
-}
-
-function printReceipt() {
-  document.documentElement.classList.add("print-receipt");
-  const done = () => {
-    document.documentElement.classList.remove("print-receipt");
-    window.removeEventListener("afterprint", done);
-  };
-  window.addEventListener("afterprint", done);
-  window.print();
-}
-
-function Receipt({ tx, name, email, locale }: { tx: BankTx; name: string; email: string; locale: string }) {
-  const { t } = useI18n();
+export default function TransactionsPage() {
   return (
-    <article className="tx-detail receipt-sheet">
-      <p className="kicker">{t("Receipt")}</p>
-      <h2>{t(tx.title)}</h2>
-      <p className="muted">{t(tx.detail)}</p>
-      <p className={tx.direction === "in" ? "mono receipt-amount tx-in" : "mono receipt-amount"}>
-        <CurrencyFlag code={tx.currency} />
-        {tx.direction === "in" ? "+" : "−"}
-        {money(tx.amount, tx.currency, locale)}
-      </p>
-      <dl className="receipt-lines">
-        <dt>{t("Reference")}</dt>
-        <dd className="mono">{tx.id}</dd>
-        <dt>{t("Date")}</dt>
-        <dd>{issuedAt(tx.at, locale)}</dd>
-        <dt>{t("Direction")}</dt>
-        <dd>{tx.direction === "in" ? t("Money in") : t("Money out")}</dd>
-        <dt>{t("Issued to")}</dt>
-        <dd>
-          {name}
-          <span className="muted"> · {email}</span>
-        </dd>
-      </dl>
-      <div className="receipt-actions no-print">
-        <button type="button" className="btn btn-ghost btn-sm" onClick={printReceipt}>
-          {t("Print receipt")}
-        </button>
-      </div>
-    </article>
+    <Suspense fallback={<div className="app-hold" />}>
+      <TransactionsView />
+    </Suspense>
   );
 }
