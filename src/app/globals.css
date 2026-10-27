@@ -4270,7 +4270,22 @@ button.admin-back {
 
 @media (max-width: 540px) {
   .admin-metrics {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .admin-metrics > div {
+    gap: 8px;
+    padding: 10px 12px;
+  }
+  .admin-metric-icon {
+    width: 32px;
+    height: 32px;
+  }
+  .admin-metrics dt {
+    font-size: 1.2rem;
+  }
+  .admin-metrics dd {
+    font-size: 0.75rem;
   }
   .admin-file-actions .btn {
     flex: 1 1 100%;
