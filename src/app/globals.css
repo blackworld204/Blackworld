@@ -1305,7 +1305,8 @@ html[dir="rtl"] .date-caret.is-forward { transform: scaleX(-1); }
   border: 1px solid var(--line);
   border-radius: var(--radius-box);
   background: var(--paper-raised);
-  overflow: hidden;
+  /* Keep overflow visible so the country list is not clipped by this field. */
+  overflow: visible;
 }
 .phone:focus-within { border-color: var(--pine); }
 .phone[data-invalid="true"] { border-color: var(--danger); }
@@ -1317,8 +1318,10 @@ html[dir="rtl"] .date-caret.is-forward { transform: scaleX(-1); }
   border: 0;
   border-radius: 0;
   background: transparent;
+  color: var(--ink);
 }
 .phone-code { position: relative; flex: none; }
+.phone-code:has(button[aria-expanded="true"]) { z-index: 60; }
 .phone-code > button {
   display: flex;
   align-items: center;
@@ -1330,6 +1333,7 @@ html[dir="rtl"] .date-caret.is-forward { transform: scaleX(-1); }
   border-inline-end: 1px solid var(--line);
   border-radius: 0;
   background: transparent;
+  color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
 .phone-chevron { flex: none; color: var(--ink); }
@@ -1343,7 +1347,7 @@ html[dir="rtl"] .date-caret.is-forward { transform: scaleX(-1); }
 }
 .phone-menu {
   position: absolute;
-  z-index: 40;
+  z-index: 70;
   top: calc(100% + 4px);
   inset-inline-start: 0;
   display: flex;
@@ -1355,6 +1359,7 @@ html[dir="rtl"] .date-caret.is-forward { transform: scaleX(-1); }
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: var(--radius-box);
+  box-shadow: 0 12px 28px rgba(18, 19, 17, 0.12);
 }
 .phone-menu.is-up { top: auto; bottom: calc(100% + 4px); }
 .phone-menu ul {
